@@ -386,7 +386,14 @@ export default function Page() {
       )}
 
       {showProfileModal && (
-        <ProfileModal onClose={() => setShowProfileModal(false)} />
+        <ProfileModal
+          onClose={() => setShowProfileModal(false)}
+          onSignOut={() => {
+            localStorage.removeItem('dialysisiq_session')
+            setShowProfileModal(false)
+            setAuthenticated(false)
+          }}
+        />
       )}
 
       {showAllPatientsModal && (
@@ -1581,6 +1588,59 @@ function AuthScreen({
   setMode: (mode: 'login' | 'signup') => void
   onAuthenticated: () => void
 }) {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [error, setError] = useState('')
+
+  const getRegisteredUsers = (): Record<string, string> => {
+    try {
+      const stored = localStorage.getItem('dialysisiq_users')
+      if (stored) return JSON.parse(stored)
+    } catch (_) {}
+    return {
+      'doctor@northside.org': 'ClinicianPass2026!',
+    }
+  }
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+
+    const cleanEmail = email.trim().toLowerCase()
+    const users = getRegisteredUsers()
+
+    if (mode === 'login') {
+      if (!users[cleanEmail]) {
+        setError('No clinical account found with this email. Please click "Create an account" below to register first.')
+        return
+      }
+      if (users[cleanEmail] !== password) {
+        setError('Incorrect password. Please try again.')
+        return
+      }
+      localStorage.setItem('dialysisiq_session', JSON.stringify({ email: cleanEmail, time: Date.now() }))
+      onAuthenticated()
+    } else {
+      if (password.length < 6) {
+        setError('Password must be at least 6 characters long.')
+        return
+      }
+      if (password !== confirmPassword) {
+        setError('Passwords do not match. Please verify your password.')
+        return
+      }
+      if (users[cleanEmail]) {
+        setError('An account with this email already exists. Please sign in.')
+        return
+      }
+      users[cleanEmail] = password
+      localStorage.setItem('dialysisiq_users', JSON.stringify(users))
+      localStorage.setItem('dialysisiq_session', JSON.stringify({ email: cleanEmail, time: Date.now() }))
+      onAuthenticated()
+    }
+  }
+
   return (
     <main className="auth-shell">
       <section className="auth-card">
@@ -1601,18 +1661,31 @@ function AuthScreen({
           <h1>{mode === 'login' ? 'Welcome back' : 'Create your account'}</h1>
         </div>
 
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            onAuthenticated()
-          }}
-          className="auth-form"
-        >
+        {error && (
+          <div
+            style={{
+              padding: '10px 14px',
+              marginBottom: '14px',
+              borderRadius: '6px',
+              background: 'rgba(239, 68, 68, 0.12)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              color: '#f87171',
+              fontSize: '12px',
+              lineHeight: '1.4',
+            }}
+          >
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="auth-form">
           <label className="field">
             <span>Email</span>
             <input
               type="email"
               placeholder="clinician@northside.org"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               required
             />
           </label>
@@ -1622,6 +1695,8 @@ function AuthScreen({
             <input
               type="password"
               placeholder="Enter your password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               required
             />
           </label>
@@ -1632,6 +1707,8 @@ function AuthScreen({
               <input
                 type="password"
                 placeholder="Confirm your password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
                 required
               />
             </label>
@@ -1644,7 +1721,10 @@ function AuthScreen({
 
         <button
           className="auth-link"
-          onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}
+          onClick={() => {
+            setError('')
+            setMode(mode === 'login' ? 'signup' : 'login')
+          }}
         >
           {mode === 'login'
             ? 'New clinician? Create an account'
@@ -1654,6 +1734,7 @@ function AuthScreen({
     </main>
   )
 }
+
 
 function SettingsModal({ onClose }: { onClose: () => void }) {
   return (
@@ -1837,7 +1918,13 @@ function NotificationsModal({
   )
 }
 
-function ProfileModal({ onClose }: { onClose: () => void }) {
+function ProfileModal({
+  onClose,
+  onSignOut,
+}: {
+  onClose: () => void
+  onSignOut: () => void
+}) {
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-container" style={{ maxWidth: '500px' }} onClick={(e) => e.stopPropagation()}>
@@ -1880,14 +1967,29 @@ function ProfileModal({ onClose }: { onClose: () => void }) {
             </div>
           </div>
 
-          <button className="outline-button" style={{ width: '100%' }} onClick={onClose}>
-            Close Profile
-          </button>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button className="outline-button" style={{ flex: 1 }} onClick={onClose}>
+              Close
+            </button>
+            <button
+              className="outline-button"
+              style={{
+                flex: 1,
+                borderColor: 'rgba(239, 68, 68, 0.4)',
+                color: '#f87171',
+                background: 'rgba(239, 68, 68, 0.08)',
+              }}
+              onClick={onSignOut}
+            >
+              Sign Out
+            </button>
+          </div>
         </div>
       </div>
     </div>
   )
 }
+
 
 function AllPatientsModal({
   patients,
