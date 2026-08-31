@@ -33,11 +33,13 @@ import {
   fetchModule1Predict,
   fetchModule2Predict,
   fetchModule3Predict,
-  fetchModule4Predict,
+  registerClinician,
+  loginClinician,
   PatientProfile,
   MorningBriefingResponse,
   BackendPatient,
 } from '@/lib/api'
+
 
 function getPatientName(p: { pid: number; name?: string | null }): string {
   return p.name || `Patient #${p.pid}`
@@ -1592,52 +1594,53 @@ function AuthScreen({
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
-  const getRegisteredUsers = (): Record<string, string> => {
-    try {
-      const stored = localStorage.getItem('dialysisiq_users')
-      if (stored) return JSON.parse(stored)
-    } catch (_) {}
-    return {
-      'doctor@northside.org': 'ClinicianPass2026!',
-    }
-  }
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    setSubmitting(true)
 
     const cleanEmail = email.trim().toLowerCase()
-    const users = getRegisteredUsers()
 
-    if (mode === 'login') {
-      if (!users[cleanEmail]) {
-        setError('No clinical account found with this email. Please click "Create an account" below to register first.')
-        return
+    try {
+      if (mode === 'login') {
+        const data = await loginClinician(cleanEmail, password)
+        localStorage.setItem(
+          'dialysisiq_session',
+          JSON.stringify({
+            email: data.user?.email || cleanEmail,
+            token: data.access_token,
+            time: Date.now(),
+          })
+        )
+        onAuthenticated()
+      } else {
+        if (password.length < 6) {
+          setError('Password must be at least 6 characters long.')
+          setSubmitting(false)
+          return
+        }
+        if (password !== confirmPassword) {
+          setError('Passwords do not match. Please verify your password.')
+          setSubmitting(false)
+          return
+        }
+        const data = await registerClinician(cleanEmail, password)
+        localStorage.setItem(
+          'dialysisiq_session',
+          JSON.stringify({
+            email: data.user?.email || cleanEmail,
+            time: Date.now(),
+          })
+        )
+        onAuthenticated()
       }
-      if (users[cleanEmail] !== password) {
-        setError('Incorrect password. Please try again.')
-        return
-      }
-      localStorage.setItem('dialysisiq_session', JSON.stringify({ email: cleanEmail, time: Date.now() }))
-      onAuthenticated()
-    } else {
-      if (password.length < 6) {
-        setError('Password must be at least 6 characters long.')
-        return
-      }
-      if (password !== confirmPassword) {
-        setError('Passwords do not match. Please verify your password.')
-        return
-      }
-      if (users[cleanEmail]) {
-        setError('An account with this email already exists. Please sign in.')
-        return
-      }
-      users[cleanEmail] = password
-      localStorage.setItem('dialysisiq_users', JSON.stringify(users))
-      localStorage.setItem('dialysisiq_session', JSON.stringify({ email: cleanEmail, time: Date.now() }))
-      onAuthenticated()
+    } catch (err: any) {
+      console.error('Supabase Auth error:', err)
+      setError(err.message || 'Authentication failed. Please verify your credentials.')
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -1657,7 +1660,7 @@ function AuthScreen({
         </div>
 
         <div className="auth-heading">
-          <p className="section-label">SECURE CLINICAL ACCESS</p>
+          <p className="section-label">SECURE CLINICAL ACCESS (SUPABASE AUTH)</p>
           <h1>{mode === 'login' ? 'Welcome back' : 'Create your account'}</h1>
         </div>
 
@@ -1687,6 +1690,7 @@ function AuthScreen({
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              disabled={submitting}
             />
           </label>
 
@@ -1698,6 +1702,7 @@ function AuthScreen({
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              disabled={submitting}
             />
           </label>
 
@@ -1710,12 +1715,13 @@ function AuthScreen({
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
+                disabled={submitting}
               />
             </label>
           )}
 
-          <button className="primary-button" type="submit">
-            {mode === 'login' ? 'Sign in' : 'Create account'}
+          <button className="primary-button" type="submit" disabled={submitting}>
+            {submitting ? 'Authenticating with Supabase...' : mode === 'login' ? 'Sign in' : 'Create account'}
           </button>
         </form>
 
@@ -1725,6 +1731,7 @@ function AuthScreen({
             setError('')
             setMode(mode === 'login' ? 'signup' : 'login')
           }}
+          disabled={submitting}
         >
           {mode === 'login'
             ? 'New clinician? Create an account'
@@ -1734,6 +1741,7 @@ function AuthScreen({
     </main>
   )
 }
+
 
 
 function SettingsModal({ onClose }: { onClose: () => void }) {
