@@ -1613,7 +1613,6 @@ function AuthScreen({
             <input
               type="email"
               placeholder="clinician@northside.org"
-              defaultValue="doctor@northside.org"
               required
             />
           </label>
@@ -1623,7 +1622,6 @@ function AuthScreen({
             <input
               type="password"
               placeholder="Enter your password"
-              defaultValue="password123"
               required
             />
           </label>
@@ -1685,7 +1683,7 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '11px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: '#101b24', borderRadius: '6px' }}>
                 <span style={{ color: '#8295a3' }}>FastAPI Backend Endpoint</span>
-                <strong style={{ color: 'var(--primary)', fontFamily: 'monospace' }}>http://127.0.0.1:8000</strong>
+                <strong style={{ color: 'var(--primary)', fontFamily: 'monospace' }}>https://dialysisiq-backend-1.onrender.com</strong>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: '#101b24', borderRadius: '6px' }}>
