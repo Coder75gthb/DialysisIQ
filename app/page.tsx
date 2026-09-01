@@ -716,6 +716,7 @@ function Briefing({
       </div>
 
       <div className="briefing-columns">
+        {/* LEFT PANEL: SHIFT PRIORITIES CHECKLIST */}
         <section className="panel priorities">
           <div className="panel-header">
             <div>
@@ -745,80 +746,106 @@ function Briefing({
           ))}
         </section>
 
-        <section className="panel drift" style={{ background: '#0e1821', borderColor: 'var(--border)' }}>
-          <div className="panel-header" style={{ marginBottom: '12px' }}>
+        {/* RIGHT PANEL: EQUAL-SIZED UNIT RISK SPECTRUM & TRIAGE WIDGET */}
+        <section className="panel" style={{ background: '#0e1821', borderColor: 'var(--border)' }}>
+          <div className="panel-header" style={{ marginBottom: '14px' }}>
             <div>
-              <p className="section-label">CLINICAL ENGINE BRIEFING</p>
-              <h3>Morning Unit AI Synthesis</h3>
+              <p className="section-label">UNIT SPECTRUM</p>
+              <h3>Clinical Triage Status</h3>
             </div>
             <Cpu size={19} style={{ color: 'var(--primary)' }} />
           </div>
 
-          {/* UNIQUE & USEFUL CLINICAL TRIAGE WIDGETS */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '14px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div
               style={{
-                padding: '10px 12px',
-                borderRadius: '6px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '10px 14px',
+                borderRadius: '7px',
                 background: 'rgba(240, 91, 91, 0.08)',
                 border: '1px solid rgba(240, 91, 91, 0.25)',
               }}
             >
-              <span style={{ fontSize: '10px', color: '#8a9ea8', textTransform: 'uppercase', fontWeight: 600, display: 'block' }}>
-                High-Risk Triage
-              </span>
-              <strong style={{ fontSize: '15px', color: '#f05b5b', display: 'block', marginTop: '2px' }}>
-                {highRiskPatients.length} Patients
-              </strong>
-              <span style={{ fontSize: '10px', color: '#8a9ea8' }}>Pre-session protocol</span>
+              <div>
+                <strong style={{ fontSize: '12px', color: '#f05b5b', display: 'block' }}>High-Risk Hypotension</strong>
+                <span style={{ fontSize: '10px', color: '#8a9ea8' }}>Pre-session protocol required</span>
+              </div>
+              <strong style={{ fontSize: '16px', color: '#f05b5b' }}>{highRiskPatients.length}</strong>
             </div>
 
             <div
               style={{
-                padding: '10px 12px',
-                borderRadius: '6px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '10px 14px',
+                borderRadius: '7px',
                 background: 'rgba(237, 180, 84, 0.08)',
                 border: '1px solid rgba(237, 180, 84, 0.25)',
               }}
             >
-              <span style={{ fontSize: '10px', color: '#8a9ea8', textTransform: 'uppercase', fontWeight: 600, display: 'block' }}>
-                Weight Trajectory
-              </span>
-              <strong style={{ fontSize: '15px', color: '#edb454', display: 'block', marginTop: '2px' }}>
-                {driftAlerts.length} Drifts Flagged
-              </strong>
-              <span style={{ fontSize: '10px', color: '#8a9ea8' }}>Module 4 trajectory</span>
+              <div>
+                <strong style={{ fontSize: '12px', color: '#edb454', display: 'block' }}>Dry Weight Drifts</strong>
+                <span style={{ fontSize: '10px', color: '#8a9ea8' }}>Module 4 trajectory flagged</span>
+              </div>
+              <strong style={{ fontSize: '16px', color: '#edb454' }}>{driftAlerts.length}</strong>
             </div>
 
             <div
               style={{
-                padding: '10px 12px',
-                borderRadius: '6px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '10px 14px',
+                borderRadius: '7px',
                 background: 'rgba(77, 197, 138, 0.08)',
                 border: '1px solid rgba(77, 197, 138, 0.25)',
               }}
             >
-              <span style={{ fontSize: '10px', color: '#8a9ea8', textTransform: 'uppercase', fontWeight: 600, display: 'block' }}>
-                Signal Integrity
-              </span>
-              <strong style={{ fontSize: '15px', color: '#4dc58a', display: 'block', marginTop: '2px' }}>
-                100% Telemetry
-              </strong>
-              <span style={{ fontSize: '10px', color: '#8a9ea8' }}>Module 3 SHAP active</span>
+              <div>
+                <strong style={{ fontSize: '12px', color: '#4dc58a', display: 'block' }}>Telemetry Signal Integrity</strong>
+                <span style={{ fontSize: '10px', color: '#8a9ea8' }}>Module 3 SHAP monitoring active</span>
+              </div>
+              <strong style={{ fontSize: '16px', color: '#4dc58a' }}>100%</strong>
             </div>
           </div>
-
-          {/* PARSED & BEAUTIFULLY FORMATTED AI BRIEFING BELOW */}
-          <div style={{ padding: '2px 0' }}>
-            {data?.briefing ? (
-              renderFormattedBriefing(data.briefing)
-            ) : (
-              <div style={{ fontSize: '12px', lineHeight: '1.6', color: '#b0c2ce' }}>
-                Unit clinical assessment complete. <strong>{highRiskPatients.length}</strong> high-risk hypotension flags and <strong>{driftAlerts.length}</strong> dry weight trajectory drifts detected across today&apos;s shift. Review individual patient telemetry prior to treatment initiation.
-              </div>
-            )}
-          </div>
         </section>
+      </div>
+
+      {/* FULL-WIDTH SECTION BELOW FOR THE EXECUTIVE AI BRIEFING */}
+      <section className="panel" style={{ marginTop: '24px', background: '#091118', borderColor: 'var(--border)' }}>
+        <div className="panel-header" style={{ marginBottom: '16px' }}>
+          <div>
+            <p className="section-label">CLINICAL ENGINE BRIEFING</p>
+            <h3>Morning Unit Executive AI Synthesis</h3>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '10px', color: 'var(--primary)', background: 'rgba(24, 198, 177, 0.1)', padding: '3px 8px', borderRadius: '4px', border: '1px solid rgba(24, 198, 177, 0.25)', fontWeight: 600 }}>
+              Module 5 Groq Engine Active
+            </span>
+            <button
+              className="outline-button"
+              style={{ padding: '4px 8px', fontSize: '10px' }}
+              onClick={onRefresh}
+            >
+              <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} /> Refresh AI
+            </button>
+          </div>
+        </div>
+
+        {/* PARSED & BEAUTIFULLY FORMATTED AI BRIEFING */}
+        <div>
+          {data?.briefing ? (
+            renderFormattedBriefing(data.briefing)
+          ) : (
+            <div style={{ fontSize: '12px', lineHeight: '1.6', color: '#b0c2ce' }}>
+              Unit clinical assessment complete. <strong>{highRiskPatients.length}</strong> high-risk hypotension flags and <strong>{driftAlerts.length}</strong> dry weight trajectory drifts detected across today&apos;s shift. Review individual patient telemetry prior to treatment initiation.
+            </div>
+          )}
+        </div>
+      </section>
       </div>
     </div>
   )
