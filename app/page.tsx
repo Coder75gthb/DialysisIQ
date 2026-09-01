@@ -746,12 +746,12 @@ function Briefing({
           ))}
         </section>
 
-        {/* RIGHT PANEL: EQUAL-SIZED UNIT RISK SPECTRUM & TRIAGE WIDGET */}
+        {/* RIGHT PANEL: DIALYZER HARDWARE & TELEMETRY PARAMETERS */}
         <section className="panel" style={{ background: '#0e1821', borderColor: 'var(--border)' }}>
           <div className="panel-header" style={{ marginBottom: '14px' }}>
             <div>
-              <p className="section-label">UNIT SPECTRUM</p>
-              <h3>Clinical Triage Status</h3>
+              <p className="section-label">HARDWARE PARAMETERS</p>
+              <h3>Dialyzer Sensor Baselines</h3>
             </div>
             <Cpu size={19} style={{ color: 'var(--primary)' }} />
           </div>
@@ -764,33 +764,15 @@ function Briefing({
                 justifyContent: 'space-between',
                 padding: '10px 14px',
                 borderRadius: '7px',
-                background: 'rgba(240, 91, 91, 0.08)',
-                border: '1px solid rgba(240, 91, 91, 0.25)',
+                background: 'rgba(24, 198, 177, 0.08)',
+                border: '1px solid rgba(24, 198, 177, 0.25)',
               }}
             >
               <div>
-                <strong style={{ fontSize: '12px', color: '#f05b5b', display: 'block' }}>High-Risk Hypotension</strong>
-                <span style={{ fontSize: '10px', color: '#8a9ea8' }}>Pre-session protocol required</span>
+                <strong style={{ fontSize: '12px', color: '#68e0d1', display: 'block' }}>Isothermic Dialysate Temp</strong>
+                <span style={{ fontSize: '10px', color: '#8a9ea8' }}>Cooling protocol (Target: 35.5 - 37.0°C)</span>
               </div>
-              <strong style={{ fontSize: '16px', color: '#f05b5b' }}>{highRiskPatients.length}</strong>
-            </div>
-
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '10px 14px',
-                borderRadius: '7px',
-                background: 'rgba(237, 180, 84, 0.08)',
-                border: '1px solid rgba(237, 180, 84, 0.25)',
-              }}
-            >
-              <div>
-                <strong style={{ fontSize: '12px', color: '#edb454', display: 'block' }}>Dry Weight Drifts</strong>
-                <span style={{ fontSize: '10px', color: '#8a9ea8' }}>Module 4 trajectory flagged</span>
-              </div>
-              <strong style={{ fontSize: '16px', color: '#edb454' }}>{driftAlerts.length}</strong>
+              <strong style={{ fontSize: '15px', color: '#68e0d1' }}>36.5 °C</strong>
             </div>
 
             <div
@@ -805,45 +787,90 @@ function Briefing({
               }}
             >
               <div>
-                <strong style={{ fontSize: '12px', color: '#4dc58a', display: 'block' }}>Telemetry Signal Integrity</strong>
-                <span style={{ fontSize: '10px', color: '#8a9ea8' }}>Module 3 SHAP monitoring active</span>
+                <strong style={{ fontSize: '12px', color: '#4dc58a', display: 'block' }}>Dialysate Conductivity</strong>
+                <span style={{ fontSize: '10px', color: '#8a9ea8' }}>Ion balance (Target: 13.5 - 14.5 mS/cm)</span>
               </div>
-              <strong style={{ fontSize: '16px', color: '#4dc58a' }}>100%</strong>
+              <strong style={{ fontSize: '15px', color: '#4dc58a' }}>14.0 mS/cm</strong>
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '10px 14px',
+                borderRadius: '7px',
+                background: 'rgba(237, 180, 84, 0.08)',
+                border: '1px solid rgba(237, 180, 84, 0.25)',
+              }}
+            >
+              <div>
+                <strong style={{ fontSize: '12px', color: '#edb454', display: 'block' }}>Mean Ultrafiltration Rate</strong>
+                <span style={{ fontSize: '10px', color: '#8a9ea8' }}>Safety limit: &lt; 13.0 mL/kg/hr</span>
+              </div>
+              <strong style={{ fontSize: '15px', color: '#edb454' }}>9.8 mL/kg/h</strong>
             </div>
           </div>
         </section>
       </div>
 
-      {/* FULL-WIDTH SECTION BELOW FOR THE EXECUTIVE AI BRIEFING */}
-      <section className="panel" style={{ marginTop: '24px', background: '#091118', borderColor: 'var(--border)' }}>
+      {/* FULL-WIDTH SECTION BELOW FOR MULTI-MODULE CLINICAL INTELLIGENCE CONSOLE */}
+      <section className="panel" style={{ marginTop: '24px', background: '#081118', borderColor: 'var(--border)' }}>
         <div className="panel-header" style={{ marginBottom: '16px' }}>
           <div>
-            <p className="section-label">CLINICAL ENGINE BRIEFING</p>
-            <h3>Morning Unit Executive AI Synthesis</h3>
+            <p className="section-label">CLINICAL INTELLIGENCE PIPELINE</p>
+            <h3>DialysisIQ Multi-Module Machine Learning Engine</h3>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ fontSize: '10px', color: 'var(--primary)', background: 'rgba(24, 198, 177, 0.1)', padding: '3px 8px', borderRadius: '4px', border: '1px solid rgba(24, 198, 177, 0.25)', fontWeight: 600 }}>
-              Module 5 Groq Engine Active
+              5 ML Modules Active
             </span>
             <button
               className="outline-button"
               style={{ padding: '4px 8px', fontSize: '10px' }}
               onClick={onRefresh}
             >
-              <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} /> Refresh AI
+              <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} /> Refresh Pipeline
             </button>
           </div>
         </div>
 
-        {/* PARSED & BEAUTIFULLY FORMATTED AI BRIEFING */}
-        <div>
-          {data?.briefing ? (
-            renderFormattedBriefing(data.briefing)
-          ) : (
-            <div style={{ fontSize: '12px', lineHeight: '1.6', color: '#b0c2ce' }}>
-              Unit clinical assessment complete. <strong>{highRiskPatients.length}</strong> high-risk hypotension flags and <strong>{driftAlerts.length}</strong> dry weight trajectory drifts detected across today&apos;s shift. Review individual patient telemetry prior to treatment initiation.
-            </div>
-          )}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+          <div style={{ padding: '14px', borderRadius: '8px', background: '#0d1822', border: '1px solid #1a2c3b' }}>
+            <div style={{ fontSize: '10px', color: 'var(--primary)', fontWeight: 700, letterSpacing: '0.5px' }}>MODULE 1</div>
+            <strong style={{ fontSize: '13px', display: 'block', margin: '4px 0 6px', color: '#e0ecf2' }}>Target Blood Flow (Qb)</strong>
+            <p style={{ fontSize: '11px', color: '#8a9ea8', margin: 0, lineHeight: 1.5 }}>
+              XGBoost Regression model predicting optimal pre-session blood flow rate (250 - 350 mL/min) with Kt/V clearance target validation.
+            </p>
+            <div style={{ marginTop: '10px', fontSize: '10px', color: '#68e0d1', fontWeight: 600 }}>66 Vitals Features</div>
+          </div>
+
+          <div style={{ padding: '14px', borderRadius: '8px', background: '#0d1822', border: '1px solid #1a2c3b' }}>
+            <div style={{ fontSize: '10px', color: '#f05b5b', fontWeight: 700, letterSpacing: '0.5px' }}>MODULE 2</div>
+            <strong style={{ fontSize: '13px', display: 'block', margin: '4px 0 6px', color: '#e0ecf2' }}>Intraday Hypotension Risk</strong>
+            <p style={{ fontSize: '11px', color: '#8a9ea8', margin: 0, lineHeight: 1.5 }}>
+              LightGBM Calibrated Risk Tiering evaluating pre-SBP drop, IDWG, and historical intradialytic crashes with managed status adjustments.
+            </p>
+            <div style={{ marginTop: '10px', fontSize: '10px', color: '#f05b5b', fontWeight: 600 }}>100 Hemodynamic Features</div>
+          </div>
+
+          <div style={{ padding: '14px', borderRadius: '8px', background: '#0d1822', border: '1px solid #1a2c3b' }}>
+            <div style={{ fontSize: '10px', color: '#4dc58a', fontWeight: 700, letterSpacing: '0.5px' }}>MODULE 3</div>
+            <strong style={{ fontSize: '13px', display: 'block', margin: '4px 0 6px', color: '#e0ecf2' }}>Telemetry Event Classifier</strong>
+            <p style={{ fontSize: '11px', color: '#8a9ea8', margin: 0, lineHeight: 1.5 }}>
+              Multi-class tree classifier + TreeSHAP explainability engine auto-detecting acute hypotension, conductivity drift, and Qb dropouts.
+            </p>
+            <div style={{ marginTop: '10px', fontSize: '10px', color: '#4dc58a', fontWeight: 600 }}>43 Telemetry Features</div>
+          </div>
+
+          <div style={{ padding: '14px', borderRadius: '8px', background: '#0d1822', border: '1px solid #1a2c3b' }}>
+            <div style={{ fontSize: '10px', color: '#edb454', fontWeight: 700, letterSpacing: '0.5px' }}>MODULE 4 & 5</div>
+            <strong style={{ fontSize: '13px', display: 'block', margin: '4px 0 6px', color: '#e0ecf2' }}>Drift & LLM Synthesis</strong>
+            <p style={{ fontSize: '11px', color: '#8a9ea8', margin: 0, lineHeight: 1.5 }}>
+              30-session dry weight trajectory classifier (Fluid vs Body Mass) paired with Groq LLM clinical morning shift briefing synthesizer.
+            </p>
+            <div style={{ marginTop: '10px', fontSize: '10px', color: '#edb454', fontWeight: 600 }}>25 Trajectory Features</div>
+          </div>
         </div>
       </section>
     </div>
