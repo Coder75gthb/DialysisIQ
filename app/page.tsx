@@ -604,14 +604,27 @@ function Briefing({
     <div className="content">
       <div className="section-heading">
         <div>
-          <p className="section-label">PRE-SHIFT OVERVIEW</p>
-          <h2>
+          <p className="section-label">PRE-SHIFT OVERVIEW</p          <h2>
             Good morning,{' '}
             {(() => {
               const sessionStr = typeof window !== 'undefined' ? localStorage.getItem('dialysisiq_session') : null
-              const sessionObj = sessionStr ? JSON.parse(sessionStr) : null
-              const rawName = sessionObj?.full_name || sessionObj?.email?.split('@')[0] || 'Clinician'
-              return rawName.startsWith('Dr.') ? rawName : `Dr. ${rawName.charAt(0).toUpperCase() + rawName.slice(1)}`
+              if (!sessionStr) return 'Clinician'
+              try {
+                const sessionObj = JSON.parse(sessionStr)
+                let name = sessionObj.full_name || sessionObj.username
+                if (!name && sessionObj.email) {
+                  const prefix = sessionObj.email.split('@')[0]
+                  if (prefix.toLowerCase() !== 'dr.lee' && prefix.toLowerCase() !== 'lee') {
+                    name = prefix.charAt(0).toUpperCase() + prefix.slice(1)
+                  }
+                }
+                if (!name || name.toLowerCase() === 'dr.lee' || name.toLowerCase() === 'lee') {
+                  return 'Clinician'
+                }
+                return name.startsWith('Dr.') ? name : `Dr. ${name.charAt(0).toUpperCase() + name.slice(1)}`
+              } catch {
+                return 'Clinician'
+              }
             })()}
           </h2>
         </div>
@@ -628,6 +641,7 @@ function Briefing({
                   ? 'Unavailable'
                   : 'Updated 2m ago'}
           </small>
+
           <button
             onClick={() => onRefresh()}
             disabled={loading || refreshing}
@@ -763,7 +777,7 @@ function Briefing({
               <h3>Nephrology Clinical Briefing</h3>
             </div>
             <Cpu size={17} style={{ color: 'var(--primary)' }} />
-          </div>
+          </div>    </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div
@@ -2051,10 +2065,10 @@ function AuthScreen({
         <form onSubmit={handleSubmit} className="auth-form">
           {mode === 'signup' && (
             <label className="field">
-              <span>Full Name / Title</span>
+              <span>Username</span>
               <input
                 type="text"
-                placeholder="e.g. Dr. Aayush or Dr. Smith"
+                placeholder="e.g. Aayush or Dr. Aayush"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 required
