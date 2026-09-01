@@ -778,7 +778,7 @@ function Briefing({
               <h3>Nephrology Clinical Briefing</h3>
             </div>
             <Cpu size={17} style={{ color: 'var(--primary)' }} />
-          </div>    </div>
+          </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div
