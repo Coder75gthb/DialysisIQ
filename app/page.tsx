@@ -33,6 +33,7 @@ import {
   fetchModule1Predict,
   fetchModule2Predict,
   fetchModule3Predict,
+  fetchModule4Predict,
   registerClinician,
   loginClinician,
   PatientProfile,
@@ -1590,8 +1591,8 @@ function AuthScreen({
   setMode: (mode: 'login' | 'signup') => void
   onAuthenticated: () => void
 }) {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const [email, setEmail] = useState('dr.lee@northside.org')
+  const [password, setPassword] = useState('password123')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -1637,7 +1638,7 @@ function AuthScreen({
         onAuthenticated()
       }
     } catch (err: any) {
-      console.error('Supabase Auth error:', err)
+      console.error('Auth error:', err)
       setError(err.message || 'Authentication failed. Please verify your credentials.')
     } finally {
       setSubmitting(false)
@@ -1660,7 +1661,7 @@ function AuthScreen({
         </div>
 
         <div className="auth-heading">
-          <p className="section-label">SECURE CLINICAL ACCESS (SUPABASE AUTH)</p>
+          <p className="section-label">SECURE CLINICAL ACCESS</p>
           <h1>{mode === 'login' ? 'Welcome back' : 'Create your account'}</h1>
         </div>
 
@@ -1686,7 +1687,7 @@ function AuthScreen({
             <span>Email</span>
             <input
               type="email"
-              placeholder="clinician@northside.org"
+              placeholder="dr.lee@northside.org"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -1721,7 +1722,7 @@ function AuthScreen({
           )}
 
           <button className="primary-button" type="submit" disabled={submitting}>
-            {submitting ? 'Authenticating with Supabase...' : mode === 'login' ? 'Sign in' : 'Create account'}
+            {submitting ? 'Authenticating...' : mode === 'login' ? 'Sign in' : 'Create account'}
           </button>
         </form>
 
