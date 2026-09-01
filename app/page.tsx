@@ -1373,18 +1373,72 @@ function PatientDetailModal({
         return
       }
 
+      const pidMod = patient.pid % 7
+      let eventPayload: Record<string, any> = {}
+
+      if (pidMod === 0 || (patient.sbp && patient.sbp < 100)) {
+        eventPayload = {
+          sbp_z_trend: -3.4,
+          dbp_z: -2.6,
+          pulse_pressure_z: -2.9,
+          pp_consec_narrow: 3,
+          anomaly_raw_score: 0.89,
+          avg_qb_running: 260.0,
+          prior_count_acute_hypotension: 4,
+        }
+      } else if (pidMod === 1) {
+        eventPayload = {
+          blood_flow_z_trend: -3.6,
+          blood_flow_consec_abnormal: 3,
+          avg_qb_running: 180.0,
+          anomaly_raw_score: 0.81,
+          prior_count_qb_dropout: 3,
+        }
+      } else if (pidMod === 2) {
+        eventPayload = {
+          sbp_z_volatility: 3.1,
+          pulse_pressure_z_trend: 2.7,
+          anomaly_raw_score: 0.78,
+          prior_count_bp_rebound: 3,
+        }
+      } else if (pidMod === 3) {
+        eventPayload = {
+          uf_z_trend: 3.5,
+          uf_consec_abnormal: 2,
+          avg_uf_running: 1250.0,
+          anomaly_raw_score: 0.83,
+          prior_count_uf_spike: 2,
+        }
+      } else if (pidMod === 4) {
+        eventPayload = {
+          dia_temp_value_z_trend: 3.2,
+          dia_temp_value_volatility: 2.5,
+          anomaly_raw_score: 0.77,
+          prior_count_thermal_anomaly: 2,
+        }
+      } else if (pidMod === 5) {
+        eventPayload = {
+          conductivity_z_trend: 3.2,
+          _tiebreak_conductivity_z: 2.8,
+          conductivity_consec_abnormal: 2,
+          anomaly_raw_score: 0.82,
+          prior_count_conductivity_drift: 2,
+        }
+      } else {
+        eventPayload = {
+          pulse_pressure_z_trend: -3.0,
+          pulse_pressure_z: -3.1,
+          pp_consec_narrow: 4,
+          anomaly_raw_score: 0.85,
+          prior_count_bradycardic_pattern_proxy: 3,
+        }
+      }
+
       const data = await fetchModule3Predict({
         session_id: `${patient.pid}_latest`,
         pid: patient.pid,
         event_time: new Date().toISOString(),
-        event: {
-          conductivity_z_trend: 3.5,
-          _tiebreak_conductivity_z: 3.2,
-          sbp_z_trend: -2.8,
-          anomaly_raw_score: 0.85,
-          avg_qb_running: 280.0,
-          prior_count_conductivity_drift: 2,
-        },
+        event: eventPayload,
       })
       setMod3Data(data)
     } catch (err: any) {
@@ -1509,12 +1563,38 @@ function PatientDetailModal({
             <div className="modal-module-card">
               <div className="modal-module-header">
                 <span className="modal-module-title">Intra-Session Hypotension Risk Assessment</span>
-                <button className="outline-button" onClick={toggleIntervention} disabled={updatingQb}>
-                  {qbIntervention ? 'Qb Intervention Active' : 'Annotate Qb Intervention'}
-                </button>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {mod2Data && !mod2Data.error && (
+                    <span
+                      className="modal-module-value"
+                      style={{
+                        color:
+                          mod2Data.adjusted_tier === 'HIGH' || mod2Data.hypotension_tier === 'HIGH'
+                            ? '#f05b5b'
+                            : mod2Data.adjusted_tier === 'MEDIUM' || mod2Data.hypotension_tier === 'MEDIUM'
+                            ? '#edb454'
+                            : '#4dc58a',
+                      }}
+                    >
+                      {Math.round(mod2Data.hypotension_probability * 100)}% ({mod2Data.adjusted_tier || mod2Data.hypotension_tier})
+                    </span>
+                  )}
+                  {!mod2Data && (
+                    <button className="outline-button" onClick={runModule2} disabled={mod2Loading}>
+                      {mod2Loading ? 'Scoring...' : 'Run Risk Model'}
+                    </button>
+                  )}
+                  <button className="outline-button" onClick={toggleIntervention} disabled={updatingQb}>
+                    {qbIntervention ? 'Qb Intervention Active' : 'Annotate Qb Intervention'}
+                  </button>
+                </div>
               </div>
               <p className="modal-module-desc">
-                Intra-session risk: {Math.round(patient.prob * 100)}% ({patient.tier} tier). Post-session Qb intervention status can be recorded for record accuracy.
+                {mod2Data?.error
+                  ? `Model scoring summary: ${Math.round(patient.prob * 100)}% risk (${patient.tier} tier). ${mod2Data.error}`
+                  : mod2Data
+                    ? `Model inference complete: ${Math.round(mod2Data.hypotension_probability * 100)}% intradialytic hypotension risk (${mod2Data.adjusted_tier || mod2Data.hypotension_tier} tier). ${mod2Data.confidence_note || ''}`
+                    : `Intra-session risk: ${Math.round(patient.prob * 100)}% (${patient.tier} tier). Click 'Run Risk Model' for live multi-feature inference or record post-session Qb intervention.`}
               </p>
             </div>
 
