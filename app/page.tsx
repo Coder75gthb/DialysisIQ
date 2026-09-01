@@ -2063,12 +2063,13 @@ function AuthScreen({
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="auth-form">
+        <form onSubmit={handleSubmit} className="auth-form" autoComplete="off">
           {mode === 'signup' && (
             <label className="field">
               <span>Username</span>
               <input
                 type="text"
+                name="username"
                 placeholder="e.g. Aayush or Dr. Aayush"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
@@ -2083,6 +2084,7 @@ function AuthScreen({
             <span>Email</span>
             <input
               type="email"
+              name="email"
               placeholder="clinician@hospital.org"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -2096,12 +2098,13 @@ function AuthScreen({
             <span>Password</span>
             <input
               type="password"
+              name="password"
               placeholder="Enter your password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
               disabled={submitting}
-              autoComplete="off"
+              autoComplete="new-password"
             />
           </label>
 
@@ -2110,11 +2113,13 @@ function AuthScreen({
               <span>Confirm password</span>
               <input
                 type="password"
+                name="confirmPassword"
                 placeholder="Confirm your password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
                 disabled={submitting}
+                autoComplete="new-password"
               />
             </label>
           )}
