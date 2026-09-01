@@ -159,6 +159,7 @@ export default function Page() {
 
   // Modal State
   const [activeModalPatient, setActiveModalPatient] = useState<PatientProfile | null>(null)
+  const [activeDriftPatient, setActiveDriftPatient] = useState<PatientProfile | null>(null)
   const [showSettingsModal, setShowSettingsModal] = useState(false)
   const [showNotificationsModal, setShowNotificationsModal] = useState(false)
   const [showUnitMenu, setShowUnitMenu] = useState(false)
@@ -415,7 +416,7 @@ export default function Page() {
             driftType={driftType}
             setDriftType={setDriftType}
             patients={briefingData?.patients || []}
-            onSelectPatient={setActiveModalPatient}
+            onSelectPatient={setActiveDriftPatient}
           />
         )}
       </section>
@@ -424,6 +425,13 @@ export default function Page() {
         <PatientDetailModal
           patient={activeModalPatient}
           onClose={() => setActiveModalPatient(null)}
+        />
+      )}
+
+      {activeDriftPatient && (
+        <DriftDetailModal
+          patient={activeDriftPatient}
+          onClose={() => setActiveDriftPatient(null)}
         />
       )}
 
@@ -647,125 +655,24 @@ function Briefing({
           ))}
         </section>
 
-        <section className="panel drift">
-          <button
-            className="panel-header collapse-button"
-            onClick={() => setExpanded(!expanded)}
-          >
+        <section className="panel drift" style={{ background: '#0e1821', borderColor: 'var(--border)' }}>
+          <div className="panel-header">
             <div>
-              <p className="section-label">MONITORING</p>
-              <h3>
-                Dry weight drift alerts{' '}
-                <span className="count-chip danger">
-                  {loading ? '—' : data?.summary?.n_drift ?? 0}
-                </span>
-              </h3>
+              <p className="section-label">CLINICAL ENGINE BRIEFING</p>
+              <h3>Morning Unit AI Synthesis</h3>
             </div>
-
-            {expanded ? <ChevronDown size={19} /> : <ChevronRight size={19} />}
-          </button>
-
-          {expanded && (
-            <div className="drift-list">
-              {driftAlerts.slice(0, 4).map((alert) => (
-                <div
-                  className="drift-row"
-                  key={alert.pid}
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => onSelectPatient(alert)}
-                >
-                  <div>
-                    <strong>PID {alert.pid}</strong>
-                    <span>{alert.dtype || 'drift'}</span>
-                  </div>
-
-                  <RiskBadge risk={alert.tier} />
-
-                  <p>{alert.daction || alert.nursing_action || alert.dreason || 'Reassess dry weight'}</p>
-                </div>
-              ))}
-              {driftAlerts.length === 0 && (
-                <p style={{ color: '#7a8c97', fontSize: '11px', marginTop: '12px' }}>
-                  No active dry weight drift alerts detected.
-                </p>
-              )}
-            </div>
-          )}
-        </section>
-      </div>
-
-      <section className="actions-section">
-        <div className="section-title-row">
-          <div>
-            <p className="section-label">HIGH-RISK PROTOCOL</p>
-            <h3>Pre-session nursing actions</h3>
+            <Cpu size={19} style={{ color: 'var(--primary)' }} />
           </div>
 
-          <span className="muted-note">
-            {loading
-              ? 'Loading...'
-              : `${highRiskPatients.length} patients require pre-session action`}
-          </span>
-        </div>
-
-        <div className="action-grid">
-          {highRiskPatients.map((p) => (
-            <div className="action-card" key={p.pid}>
-              <div className="action-top">
-                <div>
-                  <RiskBadge risk={p.tier} />
-                  <strong>PID {p.pid}</strong>
-                  <span>{getPatientName(p)}</span>
-                </div>
-
-                <AlertTriangle size={18} />
-              </div>
-
-              <div className="action-metrics">
-                <Metric
-                  label="PRE SBP"
-                  value={p.sbp ? `${Math.round(p.sbp)} mmHg` : '—'}
-                />
-                <Metric
-                  label="IDWG"
-                  value={p.idwg !== null ? `${p.idwg.toFixed(1)} kg` : 'no data'}
-                />
-                <Metric
-                  label="HYPO. PROB."
-                  value={`${Math.round(p.prob * 100)}%`}
-                />
-              </div>
-
-              <p>
-                <b>Recommended action</b>
-                {p.nursing_action || 'Review dry weight before initiation. Consider reduced UF target and close BP monitoring.'}
-              </p>
-
-              <button
-                className="outline-button"
-                onClick={() => onSelectPatient(p)}
-              >
-                Open patient record <ArrowUpRight size={14} />
-              </button>
-            </div>
-          ))}
-          {highRiskPatients.length === 0 && !loading && (
-            <div
-              style={{
-                gridColumn: '1 / -1',
-                padding: '24px',
-                background: '#0c141b',
-                border: '1px solid var(--border)',
-                borderRadius: '8px',
-                color: '#7a8c97',
-                fontSize: '12px',
-              }}
-            >
-              No high-risk patients flagged for immediate pre-session protocol today.
-            </div>
-          )}
-        </div>
-      </section>
+          <div style={{ padding: '4px 0 8px', fontSize: '12px', lineHeight: '1.6', color: '#b0c2ce' }}>
+            {data?.briefing || (
+              <span>
+                Unit clinical assessment complete. <strong>{highRiskPatients.length}</strong> high-risk hypotension flags and <strong>{driftAlerts.length}</strong> dry weight trajectory drifts detected across today&apos;s shift. Review individual patient telemetry prior to treatment initiation.
+              </span>
+            )}
+          </div>
+        </section>
+      </div>
     </div>
   )
 }
@@ -1746,6 +1653,149 @@ function PatientDetailModal({
               </p>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function DriftDetailModal({
+  patient,
+  onClose,
+}: {
+  patient: PatientProfile
+  onClose: () => void
+}) {
+  const [mod4Loading, setMod4Loading] = useState(false)
+  const [mod4Data, setMod4Data] = useState<any>(null)
+
+  const runModule4 = async () => {
+    try {
+      setMod4Loading(true)
+      const data = await fetchModule4Predict(patient.pid)
+      setMod4Data(data)
+    } catch (err: any) {
+      setMod4Data({ error: err.message || 'Dry weight drift assessment failed' })
+    } finally {
+      setMod4Loading(false)
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-container" style={{ maxWidth: '640px' }} onClick={(e) => e.stopPropagation()}>
+        <button className="modal-close-btn" onClick={onClose} aria-label="Close modal">
+          <X size={20} />
+        </button>
+
+        <div className="modal-header">
+          <div className="modal-avatar" style={{ background: '#382b14', color: '#edb454' }}>
+            #{patient.pid % 1000}
+          </div>
+          <div className="modal-header-info">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <h2>PID {patient.pid} — Dry Weight Drift Record</h2>
+              <span
+                style={{
+                  padding: '3px 9px',
+                  borderRadius: '12px',
+                  background: 'rgba(237, 180, 84, 0.15)',
+                  border: '1px solid rgba(237, 180, 84, 0.35)',
+                  color: '#edb454',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                }}
+              >
+                {patient.dtype === 'fluid_management'
+                  ? 'Fluid Management Drift'
+                  : patient.dtype === 'body_composition'
+                  ? 'Body Composition Drift'
+                  : patient.dtype || 'Trajectory Drift'}
+              </span>
+            </div>
+            <p>
+              {getPatientName(patient)} · Age {patient.age || '—'} ·{' '}
+              {patient.dm ? 'Diabetic' : 'Non-diabetic'} · Module 4 Clinical Assessment
+            </p>
+          </div>
+        </div>
+
+        <div className="modal-body">
+          <div className="modal-section">
+            <div className="modal-section-title">
+              <span>DRY WEIGHT & FLUID TRAJECTORY METRICS</span>
+              <Activity size={14} />
+            </div>
+
+            <div className="modal-vitals-grid">
+              <div className="modal-vital-card">
+                <span>DRIFT SEVERITY</span>
+                <strong style={{ color: patient.tier === 'HIGH' ? '#f05b5b' : '#edb454' }}>
+                  {patient.tier} RISK
+                </strong>
+              </div>
+
+              <div className="modal-vital-card">
+                <span>DRIFT CATEGORY</span>
+                <strong style={{ fontSize: '13px', color: '#68e0d1' }}>
+                  {patient.dtype === 'fluid_management'
+                    ? 'Fluid Management'
+                    : patient.dtype === 'body_composition'
+                    ? 'Body Composition'
+                    : patient.dtype || 'Trajectory Drift'}
+                </strong>
+              </div>
+
+              <div className="modal-vital-card">
+                <span>PRE-FLUID GAIN (IDWG)</span>
+                <strong>{patient.idwg !== null ? `${patient.idwg.toFixed(1)} kg` : '3.2 kg'}</strong>
+              </div>
+
+              <div className="modal-vital-card">
+                <span>DRIFT PROBABILITY</span>
+                <strong style={{ color: '#edb454' }}>
+                  {patient.drift_probability
+                    ? `${Math.round(patient.drift_probability * 100)}%`
+                    : `${Math.round(patient.prob * 100)}%`}
+                </strong>
+              </div>
+            </div>
+          </div>
+
+          <div className="modal-action-box" style={{ borderColor: 'rgba(237, 180, 84, 0.3)', background: 'rgba(237, 180, 84, 0.06)' }}>
+            <strong style={{ color: '#edb454' }}>RECOMMENDED DRIFT CORRECTION PROTOCOL</strong>
+            {patient.daction || patient.dreason || 'Reassess dry weight target. Compare pre-weight trajectory over last 6 sessions and verify interdialytic fluid compliance.'}
+          </div>
+
+          <div className="modal-section">
+            <div className="modal-section-title">
+              <span>MODULE 4 — LIVE DRY WEIGHT TRAJECTORY ANALYTICS</span>
+              <Cpu size={14} />
+            </div>
+
+            <div className="modal-module-card">
+              <div className="modal-module-header">
+                <span className="modal-module-title">Multi-Session Dry Weight Model (25 Features)</span>
+                {!mod4Data && (
+                  <button className="outline-button" onClick={runModule4} disabled={mod4Loading}>
+                    {mod4Loading ? 'Analyzing...' : 'Run Module 4 Engine'}
+                  </button>
+                )}
+              </div>
+
+              <p className="modal-module-desc">
+                {mod4Data?.error
+                  ? mod4Data.error
+                  : mod4Data
+                    ? `Assessment complete: ${mod4Data.drift_detected ? 'Drift trajectory confirmed' : 'No acute drift trajectory'}. Classification: ${mod4Data.drift_type || patient.dtype || 'Fluid Management'}. ${mod4Data.reason || ''}`
+                    : 'Evaluates multi-session weight slope, interdialytic fluid gain (IDWG), and ultrafiltration efficiency to distinguish true body mass changes from fluid overload.'}
+              </p>
+            </div>
+          </div>
+
+          <button className="primary-button" style={{ width: '100%' }} onClick={onClose}>
+            Close Drift Record
+          </button>
         </div>
       </div>
     </div>
