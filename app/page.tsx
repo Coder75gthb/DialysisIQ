@@ -1591,8 +1591,8 @@ function AuthScreen({
   setMode: (mode: 'login' | 'signup') => void
   onAuthenticated: () => void
 }) {
-  const [email, setEmail] = useState('dr.lee@northside.org')
-  const [password, setPassword] = useState('password123')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -1692,6 +1692,7 @@ function AuthScreen({
               onChange={(e) => setEmail(e.target.value)}
               required
               disabled={submitting}
+              autoComplete="off"
             />
           </label>
 
@@ -1704,6 +1705,7 @@ function AuthScreen({
               onChange={(e) => setPassword(e.target.value)}
               required
               disabled={submitting}
+              autoComplete="off"
             />
           </label>
 
