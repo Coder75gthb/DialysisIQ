@@ -46,6 +46,60 @@ function getPatientName(p: { pid: number; name?: string | null }): string {
   return p.name || `Patient #${p.pid}`
 }
 
+function formatLabelName(label: string): string {
+  if (!label) return ''
+  const map: Record<string, string> = {
+    acute_hypotension: 'Acute Hypotension',
+    bp_rebound: 'Blood Pressure Rebound',
+    bradycardic_pattern_proxy: 'Bradycardic Pattern',
+    conductivity_drift: 'Conductivity Drift',
+    connectivity_gap: 'Telemetry Connectivity Gap',
+    qb_dropout: 'Blood Flow (Qb) Dropout',
+    thermal_anomaly: 'Dialysate Thermal Anomaly',
+    uf_spike: 'Ultrafiltration Rate Spike',
+  }
+  if (map[label]) return map[label]
+  return label
+    .split('_')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
+}
+
+function formatFeatureName(feat: string): string {
+  if (!feat) return ''
+  const map: Record<string, string> = {
+    pp_consec_narrow: 'Consecutive Narrow Pulse Pressure',
+    prior_count_acute_hypotension: 'History of Acute Hypotension',
+    prior_count_bradycardic_pattern_proxy: 'History of Bradycardic Events',
+    sbp_z_trend: 'Systolic BP Drop Trajectory',
+    dbp_z: 'Diastolic BP Deviation',
+    pulse_pressure_z: 'Narrow Pulse Pressure',
+    blood_flow_z_trend: 'Blood Flow Rate Drop',
+    blood_flow_consec_abnormal: 'Abnormal Blood Flow Duration',
+    avg_qb_running: 'Running Mean Blood Flow',
+    prior_count_qb_dropout: 'History of Blood Flow Dropouts',
+    sbp_z_volatility: 'Systolic BP Instability',
+    pulse_pressure_z_trend: 'Pulse Pressure Trajectory',
+    prior_count_bp_rebound: 'History of BP Rebound',
+    uf_z_trend: 'Ultrafiltration Rate Spike',
+    uf_consec_abnormal: 'Sustained High UF Rate',
+    avg_uf_running: 'Running Mean Ultrafiltration',
+    prior_count_uf_spike: 'History of UF Spikes',
+    dia_temp_value_z_trend: 'Dialysate Temp Elevation',
+    dia_temp_value_volatility: 'Dialysate Temp Fluctuations',
+    prior_count_thermal_anomaly: 'History of Thermal Anomalies',
+    conductivity_z_trend: 'Dialysate Conductivity Drift',
+    _tiebreak_conductivity_z: 'Conductivity Baseline Shift',
+    conductivity_consec_abnormal: 'Sustained Conductivity Deviation',
+    prior_count_conductivity_drift: 'History of Conductivity Drift',
+  }
+  if (map[feat]) return map[feat]
+  return feat
+    .split('_')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
+}
+
 function getPatientFlags(p: PatientProfile): string[] {
   const flags: string[] = []
   if (p.sbp !== null && p.sbp < 115) flags.push(`Low SBP ${Math.round(p.sbp)} mmHg`)
@@ -1614,7 +1668,7 @@ function PatientDetailModal({
                           : '#4dc58a',
                     }}
                   >
-                    {mod3Data.predicted_label || mod3Data.predicted_event || 'Analyzed'}
+                    {formatLabelName(mod3Data.predicted_label || mod3Data.predicted_event || 'Analyzed')}
                     {mod3Data.confidence ? ` (${Math.round(mod3Data.confidence * 100)}%)` : ''}
                   </span>
                 )}
@@ -1624,17 +1678,51 @@ function PatientDetailModal({
                   </button>
                 )}
               </div>
-              <p className="modal-module-desc">
-                {mod3Data?.error
-                  ? mod3Data.error
-                  : mod3Data?.is_normal || mod3Data?.predicted_label === 'Normal'
-                    ? 'Telemetry Analysis Complete: Baseline telemetry stable. No treatment interruption detected (100% confidence).'
-                    : mod3Data?.dual_signal_note
-                      ? `⚠️ DUAL SIGNAL DETECTED: ${mod3Data.dual_signal_note}`
-                      : mod3Data
-                        ? `Classified abruption: ${mod3Data.predicted_label} (${Math.round((mod3Data.confidence || 0) * 100)}% conf). Top SHAP drivers: ${(mod3Data.top_features || []).map((f: any) => `${f.feature} (${f.shap > 0 ? '+' : ''}${f.shap})`).join(', ')}.`
-                        : 'Analyzes intra-session telemetry patterns for potential treatment interruption events.'}
-              </p>
+
+              {mod3Data?.error ? (
+                <p className="modal-module-desc" style={{ color: '#f87171' }}>
+                  {mod3Data.error}
+                </p>
+              ) : mod3Data?.is_normal || mod3Data?.predicted_label === 'Normal' ? (
+                <p className="modal-module-desc">
+                  Telemetry Analysis Complete: Baseline telemetry stable. No treatment interruption detected (100% confidence).
+                </p>
+              ) : mod3Data ? (
+                <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ fontSize: '11px', color: '#c5d3dc', lineHeight: '1.4' }}>
+                    Telemetry event classified as <strong style={{ color: '#f05b5b' }}>{formatLabelName(mod3Data.predicted_label)}</strong> with {Math.round((mod3Data.confidence || 0) * 100)}% model confidence.
+                  </div>
+                  {mod3Data.top_features && mod3Data.top_features.length > 0 && (
+                    <div>
+                      <span style={{ fontSize: '10px', color: '#7a8e9b', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600, display: 'block', marginBottom: '5px' }}>
+                        Key Clinical Drivers:
+                      </span>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        {mod3Data.top_features.map((f: any, idx: number) => (
+                          <span
+                            key={idx}
+                            style={{
+                              padding: '3px 9px',
+                              borderRadius: '4px',
+                              background: 'rgba(104, 224, 209, 0.1)',
+                              border: '1px solid rgba(104, 224, 209, 0.25)',
+                              color: '#68e0d1',
+                              fontSize: '11px',
+                              fontWeight: 500,
+                            }}
+                          >
+                            {formatFeatureName(f.feature)}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="modal-module-desc">
+                  Analyzes intra-session telemetry patterns for potential treatment interruption events.
+                </p>
+              )}
             </div>
 
             {/* Dry Weight Drift Assessment */}
