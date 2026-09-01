@@ -196,11 +196,11 @@ export async function fetchModule3Predict(payload: Module3RequestPayload): Promi
   return res.json()
 }
 
-export async function registerClinician(email: string, password: string): Promise<any> {
+export async function registerClinician(email: string, password: string, fullName?: string): Promise<any> {
   const res = await fetch(`${API_BASE}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, full_name: fullName }),
   })
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}))

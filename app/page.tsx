@@ -605,7 +605,15 @@ function Briefing({
       <div className="section-heading">
         <div>
           <p className="section-label">PRE-SHIFT OVERVIEW</p>
-          <h2>Good morning, Dr. Lee</h2>
+          <h2>
+            Good morning,{' '}
+            {(() => {
+              const sessionStr = typeof window !== 'undefined' ? localStorage.getItem('dialysisiq_session') : null
+              const sessionObj = sessionStr ? JSON.parse(sessionStr) : null
+              const rawName = sessionObj?.full_name || sessionObj?.email?.split('@')[0] || 'Clinician'
+              return rawName.startsWith('Dr.') ? rawName : `Dr. ${rawName.charAt(0).toUpperCase() + rawName.slice(1)}`
+            })()}
+          </h2>
         </div>
 
         <div className="live-status">
@@ -618,10 +626,11 @@ function Briefing({
                 ? 'Updating clinical risk scores...'
                 : error
                   ? 'Unavailable'
-                  : 'Updated just now'}
+                  : 'Updated 2m ago'}
           </small>
           <button
-            onClick={onRefresh}
+            onClick={() => onRefresh()}
+            disabled={loading || refreshing}
             style={{
               background: 'none',
               border: 'none',
@@ -753,12 +762,7 @@ function Briefing({
               <p className="section-label">AI SYNTHESIS</p>
               <h3>Nephrology Clinical Briefing</h3>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '9px', color: 'var(--primary)', background: 'rgba(24, 198, 177, 0.12)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(24, 198, 177, 0.25)', fontWeight: 600 }}>
-                Groq LLM
-              </span>
-              <Cpu size={17} style={{ color: 'var(--primary)' }} />
-            </div>
+            <Cpu size={17} style={{ color: 'var(--primary)' }} />
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -1953,6 +1957,7 @@ function AuthScreen({
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [fullName, setFullName] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
@@ -1970,6 +1975,7 @@ function AuthScreen({
           'dialysisiq_session',
           JSON.stringify({
             email: data.user?.email || cleanEmail,
+            full_name: data.user?.full_name || cleanEmail.split('@')[0],
             token: data.access_token,
             time: Date.now(),
           })
@@ -1986,11 +1992,12 @@ function AuthScreen({
           setSubmitting(false)
           return
         }
-        const data = await registerClinician(cleanEmail, password)
+        const data = await registerClinician(cleanEmail, password, fullName.trim())
         localStorage.setItem(
           'dialysisiq_session',
           JSON.stringify({
             email: data.user?.email || cleanEmail,
+            full_name: data.user?.full_name || fullName.trim() || cleanEmail.split('@')[0],
             time: Date.now(),
           })
         )
@@ -2042,11 +2049,26 @@ function AuthScreen({
         )}
 
         <form onSubmit={handleSubmit} className="auth-form">
+          {mode === 'signup' && (
+            <label className="field">
+              <span>Full Name / Title</span>
+              <input
+                type="text"
+                placeholder="e.g. Dr. Aayush or Dr. Smith"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                required
+                disabled={submitting}
+                autoComplete="off"
+              />
+            </label>
+          )}
+
           <label className="field">
             <span>Email</span>
             <input
               type="email"
-              placeholder="dr.lee@northside.org"
+              placeholder="clinician@hospital.org"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -2295,6 +2317,35 @@ function ProfileModal({
   onClose: () => void
   onSignOut: () => void
 }) {
+  const [sessionData, setSessionData] = useState<any>(() => {
+    if (typeof window === 'undefined') return {}
+    const s = localStorage.getItem('dialysisiq_session')
+    return s ? JSON.parse(s) : {}
+  })
+  const [editingName, setEditingName] = useState(false)
+  const [nameInput, setNameInput] = useState(sessionData.full_name || '')
+
+  const currentEmail = sessionData.email || 'clinician@northside.org'
+  const rawName = sessionData.full_name || sessionData.email?.split('@')[0] || 'Clinician'
+  const displayName = rawName.startsWith('Dr.') ? rawName : `Dr. ${rawName.charAt(0).toUpperCase() + rawName.slice(1)}`
+
+  const initials =
+    rawName
+      .replace(/^Dr\.\s*/i, '')
+      .split(' ')
+      .map((part: string) => part.charAt(0).toUpperCase())
+      .join('')
+      .slice(0, 2) || 'CL'
+
+  const saveName = () => {
+    const clean = nameInput.trim()
+    if (!clean) return
+    const updated = { ...sessionData, full_name: clean }
+    localStorage.setItem('dialysisiq_session', JSON.stringify(updated))
+    setSessionData(updated)
+    setEditingName(false)
+  }
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-container" style={{ maxWidth: '500px' }} onClick={(e) => e.stopPropagation()}>
@@ -2303,12 +2354,44 @@ function ProfileModal({
         </button>
 
         <div className="modal-header">
-          <div className="modal-avatar" style={{ background: '#21434a', color: '#92e2d8', width: '54px', height: '54px', fontSize: '18px' }}>
-            JL
+          <div className="modal-avatar" style={{ background: '#21434a', color: '#92e2d8', width: '54px', height: '54px', fontSize: '18px', fontWeight: 700 }}>
+            {initials}
           </div>
-          <div className="modal-header-info">
-            <h2>Dr. J. Lee, MD</h2>
-            <p>Lead Nephrologist · DialysisIQ Unit Administrator</p>
+          <div className="modal-header-info" style={{ flex: 1 }}>
+            {!editingName ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <h2>{displayName}</h2>
+                <button
+                  className="outline-button"
+                  style={{ padding: '2px 8px', fontSize: '10px' }}
+                  onClick={() => setEditingName(true)}
+                >
+                  Edit Name
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: '6px', marginBottom: '4px' }}>
+                <input
+                  type="text"
+                  value={nameInput}
+                  onChange={(e) => setNameInput(e.target.value)}
+                  placeholder="e.g. Dr. Aayush"
+                  style={{
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    background: '#0d161f',
+                    border: '1px solid var(--primary)',
+                    color: '#fff',
+                    fontSize: '12px',
+                    flex: 1,
+                  }}
+                />
+                <button className="primary-button" style={{ padding: '4px 8px', fontSize: '10px' }} onClick={saveName}>
+                  Save
+                </button>
+              </div>
+            )}
+            <p>{currentEmail} · DialysisIQ Clinician</p>
           </div>
         </div>
 
@@ -2321,8 +2404,8 @@ function ProfileModal({
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '11px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: '#101b24', borderRadius: '6px' }}>
-                <span style={{ color: '#7f929f' }}>Medical License</span>
-                <strong style={{ color: '#dbe5ea' }}>MD-904218-GA</strong>
+                <span style={{ color: '#7f929f' }}>Account Email</span>
+                <strong style={{ color: '#dbe5ea' }}>{currentEmail}</strong>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: '#101b24', borderRadius: '6px' }}>
