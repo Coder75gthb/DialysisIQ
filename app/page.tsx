@@ -846,7 +846,6 @@ function Briefing({
           )}
         </div>
       </section>
-      </div>
     </div>
   )
 }
