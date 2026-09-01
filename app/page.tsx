@@ -2066,10 +2066,10 @@ function AuthScreen({
         <form onSubmit={handleSubmit} className="auth-form" autoComplete="off">
           {mode === 'signup' && (
             <label className="field">
-              <span>Username</span>
+              <span>Username / Doctor Title</span>
               <input
                 type="text"
-                name="username"
+                name="clinician_user_name"
                 placeholder="e.g. Aayush or Dr. Aayush"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
@@ -2083,8 +2083,8 @@ function AuthScreen({
           <label className="field">
             <span>Email</span>
             <input
-              type="email"
-              name="email"
+              type="text"
+              name="clinician_email_address"
               placeholder="clinician@hospital.org"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -2098,7 +2098,7 @@ function AuthScreen({
             <span>Password</span>
             <input
               type="password"
-              name="password"
+              name="clinician_account_password"
               placeholder="Enter your password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -2113,7 +2113,7 @@ function AuthScreen({
               <span>Confirm password</span>
               <input
                 type="password"
-                name="confirmPassword"
+                name="clinician_account_confirm"
                 placeholder="Confirm your password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
