@@ -1521,7 +1521,9 @@ function PatientDetailModal({
 
               <div className="modal-vital-card">
                 <span>HYPO PROBABILITY</span>
-                <strong style={{ color: '#f05b5b' }}>{Math.round(patient.prob * 100)}%</strong>
+                <strong style={{ color: '#f05b5b' }}>
+                  {Math.round((mod2Data?.hypotension_probability ?? patient.prob) * 100)}%
+                </strong>
               </div>
             </div>
           </div>
@@ -1542,7 +1544,7 @@ function PatientDetailModal({
               <div className="modal-module-header">
                 <span className="modal-module-title">Target Blood Flow Rate (Qb)</span>
                 {mod1Data && !mod1Data.error && (
-                  <span className="modal-module-value">{mod1Data.predicted_qb} mL/min</span>
+                  <span className="modal-module-value">{Math.round(mod1Data.predicted_qb)} mL/min</span>
                 )}
                 {!mod1Data && (
                   <button className="outline-button" onClick={runModule1} disabled={mod1Loading}>
@@ -1554,7 +1556,7 @@ function PatientDetailModal({
                 {mod1Data?.error
                   ? mod1Data.error
                   : mod1Data
-                    ? `Optimal pre-session blood flow rate: ${mod1Data.predicted_qb} mL/min (Continuous: ${mod1Data.qb_mode_continuous?.toFixed(1)} mL/min).`
+                    ? `Optimal pre-session blood flow rate: ${Math.round(mod1Data.predicted_qb)} mL/min (Continuous: ${(mod1Data.qb_mode_continuous ?? mod1Data.predicted_qb).toFixed(1)} mL/min).`
                     : 'Calculates optimal individualized blood flow rate based on pre-session clinical vitals.'}
               </p>
             </div>
