@@ -604,7 +604,8 @@ function Briefing({
     <div className="content">
       <div className="section-heading">
         <div>
-          <p className="section-label">PRE-SHIFT OVERVIEW</p          <h2>
+          <p className="section-label">PRE-SHIFT OVERVIEW</p>
+          <h2>
             Good morning,{' '}
             {(() => {
               const sessionStr = typeof window !== 'undefined' ? localStorage.getItem('dialysisiq_session') : null
