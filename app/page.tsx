@@ -1226,7 +1226,7 @@ function SessionLogger({
                         name: `Patient #${pidNum}`,
                         gender: 'M',
                         birthday: 1965,
-                        first_dialysis: null,
+                        first_treatment: null,
                         has_dm: false,
                       }
                       setSelectedPatient(customPatient)

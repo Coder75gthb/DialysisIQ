@@ -53,7 +53,8 @@ export interface BackendPatient {
   pid: number
   gender: string | null
   birthday: number | null
-  first_dialysis: string | null
+  first_treatment?: string | null
+  first_dialysis?: string | null
   has_dm: boolean
   name: string | null
 }
