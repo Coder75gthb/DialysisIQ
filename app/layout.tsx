@@ -3,9 +3,9 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'DialysisIQ | Clinical Intelligence',
-  description: 'A clinical intelligence workspace for safer, clearer hemodialysis care.',
-  generator: 'DialysisIQ',
+  title: 'NephroIQ | Clinical Intelligence for Chronic Kidney Disease',
+  description: 'A clinical decision support workspace for safer, clearer chronic kidney disease care.',
+  generator: 'NephroIQ',
   icons: {
     icon: [
       {

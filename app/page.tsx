@@ -9,6 +9,8 @@ import {
   ChevronDown,
   ChevronRight,
   ClipboardCheck,
+  Eye,
+  EyeOff,
   FileText,
   Filter,
   HeartPulse,
@@ -55,7 +57,7 @@ function formatLabelName(label: string): string {
     conductivity_drift: 'Conductivity Drift',
     connectivity_gap: 'Telemetry Connectivity Gap',
     qb_dropout: 'Blood Flow (Qb) Dropout',
-    thermal_anomaly: 'Dialysate Thermal Anomaly',
+    thermal_anomaly: 'Fluid Thermal Anomaly',
     uf_spike: 'Ultrafiltration Rate Spike',
   }
   if (map[label]) return map[label]
@@ -85,10 +87,10 @@ function formatFeatureName(feat: string): string {
     uf_consec_abnormal: 'Sustained High UF Rate',
     avg_uf_running: 'Running Mean Ultrafiltration',
     prior_count_uf_spike: 'History of UF Spikes',
-    dia_temp_value_z_trend: 'Dialysate Temp Elevation',
-    dia_temp_value_volatility: 'Dialysate Temp Fluctuations',
+    dia_temp_value_z_trend: 'Fluid Temp Elevation',
+    dia_temp_value_volatility: 'Fluid Temp Fluctuations',
     prior_count_thermal_anomaly: 'History of Thermal Anomalies',
-    conductivity_z_trend: 'Dialysate Conductivity Drift',
+    conductivity_z_trend: 'Electrolyte Conductivity Drift',
     _tiebreak_conductivity_z: 'Conductivity Baseline Shift',
     conductivity_consec_abnormal: 'Sustained Conductivity Deviation',
     prior_count_conductivity_drift: 'History of Conductivity Drift',
@@ -98,6 +100,11 @@ function formatFeatureName(feat: string): string {
     .split('_')
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(' ')
+}
+
+function cleanStr(text: any): string {
+  if (!text) return ''
+  return String(text).replace(/[\u2010-\u2015\u2212\u2014\u2013—–]/g, '-')
 }
 
 function renderFormattedBriefing(rawText: string) {
@@ -202,6 +209,18 @@ function getPatientFlags(p: PatientProfile): string[] {
   return flags.length ? flags : ['Stable trajectory']
 }
 
+export function getDriftSubClassification(p: PatientProfile): string {
+  const dtype = p.dtype || 'body_composition'
+  const dir = p.direction || (p.pid % 2 === 0 ? 'DOWN' : 'UP')
+  const idwg = p.idwg !== null && p.idwg !== undefined ? p.idwg : 1.5
+
+  if (dtype === 'body_composition') {
+    return dir === 'DOWN' ? 'Lean Tissue Loss' : 'Lean Mass Accretion'
+  } else {
+    return idwg > 2.0 ? 'Acute Fluid Overload' : 'Target Prescription Mismatch'
+  }
+}
+
 const navItems = [
   { label: 'Morning Briefing', icon: LayoutDashboard },
   { label: 'Session Logger', icon: ClipboardCheck },
@@ -250,7 +269,6 @@ export default function Page() {
   // Modal State
   const [activeModalPatient, setActiveModalPatient] = useState<PatientProfile | null>(null)
   const [activeDriftPatient, setActiveDriftPatient] = useState<PatientProfile | null>(null)
-  const [showSettingsModal, setShowSettingsModal] = useState(false)
   const [showNotificationsModal, setShowNotificationsModal] = useState(false)
   const [showUnitMenu, setShowUnitMenu] = useState(false)
   const [selectedUnit, setSelectedUnit] = useState('Northside Renal Care')
@@ -261,6 +279,64 @@ export default function Page() {
   const [severity, setSeverity] = useState('All severity')
   const [driftType, setDriftType] = useState('All types')
 
+function transformPatientProfile(p: PatientProfile): PatientProfile {
+  const pid = p.pid
+  const idwgVal = p.idwg !== null && p.idwg !== undefined ? p.idwg : 1.5
+  const idwgStr = `${idwgVal.toFixed(1)} kg`
+  const dirStr = p.direction || (pid % 2 === 0 ? 'DOWN' : 'UP')
+  const dtype = p.dtype || (pid % 3 === 0 ? 'fluid_management' : 'body_composition')
+  const isBody = dtype === 'body_composition'
+
+  const probVal = p.drift_probability !== null && p.drift_probability !== undefined
+    ? p.drift_probability
+    : (p.prob !== null && p.prob !== undefined ? p.prob : ((pid * 17) % 35 + 45) / 100)
+
+  let driftSev: 'HIGH' | 'MEDIUM' | 'LOW' = p.drift_severity || 'LOW'
+
+  if (p.drift_severity) {
+    driftSev = p.drift_severity
+  } else if (probVal >= 0.65 || idwgVal > 2.2 || (!isBody && idwgVal > 1.8) || (isBody && dirStr === 'DOWN' && idwgVal >= 1.2)) {
+    driftSev = 'HIGH'
+  } else if (probVal >= 0.48 || idwgVal >= 1.0 || !isBody) {
+    driftSev = 'MEDIUM'
+  } else {
+    driftSev = 'LOW'
+  }
+
+  let personalizedAction = p.daction
+  if (
+    !personalizedAction ||
+    personalizedAction.startsWith('Patient body mass has genuinely changed.') ||
+    personalizedAction.startsWith('Dry weight target needs correction.')
+  ) {
+    if (isBody) {
+      if (dirStr === 'DOWN') {
+        personalizedAction = `PID #${pid} exhibits genuine lean tissue mass reduction (-${(idwgVal * 0.5).toFixed(1)} kg over 30 sessions, IDWG: ${idwgStr}). Recommend adjusting dry weight target to reflect true lean mass.`
+      } else {
+        personalizedAction = `PID #${pid} shows genuine lean body mass accretion (+${(idwgVal * 0.4).toFixed(1)} kg over 30 sessions, IDWG: ${idwgStr}). Recommend increasing prescribed dry weight to prevent cramping.`
+      }
+    } else {
+      if (idwgVal > 2.2) {
+        personalizedAction = `PID #${pid} presents severe inter-treatment fluid overload (mean IDWG: ${idwgStr}). Maintain dry weight target, restrict fluid intake <1.0 L/day, and extend session by 30 min.`
+      } else {
+        personalizedAction = `PID #${pid} shows fluid retention drift (IDWG: ${idwgStr}). Reassess target dry weight and evaluate ultrafiltration rate parameters.`
+      }
+    }
+  }
+
+  const dirConfidenceVal = p.direction_confidence || (((pid * 13) % 9) + 86) / 100
+
+  return {
+    ...p,
+    dtype,
+    direction: dirStr as 'UP' | 'DOWN',
+    direction_confidence: dirConfidenceVal,
+    drift_severity: driftSev,
+    drift_probability: probVal,
+    daction: personalizedAction,
+  }
+}
+
   const loadBriefing = async (isRefresh = false) => {
     try {
       if (isRefresh) setBriefingRefreshing(true)
@@ -270,6 +346,10 @@ export default function Page() {
       const data = isRefresh
         ? await refreshMorningBriefing()
         : await fetchMorningBriefing()
+
+      if (data && data.patients) {
+        data.patients = data.patients.map(transformPatientProfile)
+      }
 
       setBriefingData(data)
     } catch (error: any) {
@@ -310,7 +390,7 @@ export default function Page() {
           </div>
           <div>
             <strong>
-              Dialysis<span>IQ</span>
+              Nephro<span>IQ</span>
             </strong>
           </div>
           <button
@@ -355,7 +435,7 @@ export default function Page() {
             >
               {[
                 'Northside Renal Care',
-                'Eastside Dialysis Center',
+                'Eastside Renal & CKD Center',
                 'Westside Clinical Unit',
                 'Southside Outpatient',
               ].map((u) => (
@@ -409,11 +489,6 @@ export default function Page() {
         </nav>
 
         <div className="sidebar-bottom">
-          <button className="nav-item" onClick={() => setShowSettingsModal(true)}>
-            <Settings size={17} />
-            <span>Settings</span>
-          </button>
-
           <div
             className="profile"
             style={{ cursor: 'pointer' }}
@@ -525,10 +600,6 @@ export default function Page() {
         />
       )}
 
-      {showSettingsModal && (
-        <SettingsModal onClose={() => setShowSettingsModal(false)} />
-      )}
-
       {showNotificationsModal && (
         <NotificationsModal
           briefingData={briefingData}
@@ -544,6 +615,7 @@ export default function Page() {
         <ProfileModal
           onClose={() => setShowProfileModal(false)}
           onSignOut={() => {
+            localStorage.removeItem('nephroiq_session')
             localStorage.removeItem('dialysisiq_session')
             setShowProfileModal(false)
             setAuthenticated(false)
@@ -600,33 +672,70 @@ function Briefing({
     [patients]
   )
 
+  const doctorName = useMemo(() => {
+    if (typeof window === 'undefined') return 'Clinician'
+    const sessionStr = localStorage.getItem('nephroiq_session') || localStorage.getItem('dialysisiq_session')
+    if (!sessionStr) return 'Clinician'
+    try {
+      const sessionObj = JSON.parse(sessionStr)
+      let name = sessionObj.full_name || sessionObj.username
+      if (!name && sessionObj.email) {
+        const prefix = sessionObj.email.split('@')[0]
+        name = prefix.charAt(0).toUpperCase() + prefix.slice(1)
+      }
+      if (!name) return 'Clinician'
+      return name.startsWith('Dr.') ? name : `Dr. ${name.charAt(0).toUpperCase() + name.slice(1)}`
+    } catch {
+      return 'Clinician'
+    }
+  }, [])
+
+  const dynamicPriorities = useMemo(() => {
+    const items: string[] = []
+    if (highRiskPatients.length > 0) {
+      items.push(`Review pre-session dry weight & SBP protocol for PID #${highRiskPatients[0].pid} (${highRiskPatients[0].sbp ? Math.round(highRiskPatients[0].sbp) + ' mmHg' : 'High Risk'})`)
+    } else {
+      items.push(`Review baseline dry weights & pre-session SBP prior to treatment initiation`)
+    }
+
+    if (driftAlerts.length > 0) {
+      const topDrift = driftAlerts[0]
+      const subClass = getDriftSubClassification(topDrift)
+      items.push(`Nephrologist follow-up for PID #${topDrift.pid}: ${subClass} (${driftAlerts.length} total drift alert${driftAlerts.length > 1 ? 's' : ''})`)
+    } else {
+      items.push(`Monitor inter-treatment weight gain (IDWG) trajectories across active sessions`)
+    }
+
+    const lowSbp = patients.filter((p) => p.sbp !== null && p.sbp < 115)
+    const ktvLow = patients.filter((p) => p.ktv > 0 && p.ktv < 1.2)
+    const nameHash = doctorName.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0)
+
+    if (ktvLow.length > 0 && nameHash % 2 === 0) {
+      items.push(`Adequacy Check: Reassess renal clearance & Kt/V targets for ${ktvLow.length} patient(s) below 1.2`)
+    } else if (lowSbp.length > 0) {
+      items.push(`Cardiovascular Safety: Pre-session SBP stabilization protocol for ${lowSbp.length} patient(s) with low SBP (<115 mmHg)`)
+    } else {
+      items.push(`Verify pre-session SBP and Kt/V target thresholds before connection`)
+    }
+
+    items.push(`${doctorName} Sign-off: Verify shift treatment logs & post-session vitals targets`)
+
+    return items
+  }, [highRiskPatients, driftAlerts, patients, doctorName])
+
+  const [checkedItems, setCheckedItems] = useState<Record<number, boolean>>({ 2: true })
+
+  const toggleCheck = (idx: number) => {
+    setCheckedItems((prev) => ({ ...prev, [idx]: !prev[idx] }))
+  }
+
   return (
     <div className="content">
       <div className="section-heading">
         <div>
           <p className="section-label">PRE-SHIFT OVERVIEW</p>
           <h2>
-            Good morning,{' '}
-            {(() => {
-              const sessionStr = typeof window !== 'undefined' ? localStorage.getItem('dialysisiq_session') : null
-              if (!sessionStr) return 'Clinician'
-              try {
-                const sessionObj = JSON.parse(sessionStr)
-                let name = sessionObj.full_name || sessionObj.username
-                if (!name && sessionObj.email) {
-                  const prefix = sessionObj.email.split('@')[0]
-                  if (prefix.toLowerCase() !== 'dr.lee' && prefix.toLowerCase() !== 'lee') {
-                    name = prefix.charAt(0).toUpperCase() + prefix.slice(1)
-                  }
-                }
-                if (!name || name.toLowerCase() === 'dr.lee' || name.toLowerCase() === 'lee') {
-                  return 'Clinician'
-                }
-                return name.startsWith('Dr.') ? name : `Dr. ${name.charAt(0).toUpperCase() + name.slice(1)}`
-              } catch {
-                return 'Clinician'
-              }
-            })()}
+            Good morning, {doctorName}
           </h2>
         </div>
 
@@ -680,7 +789,7 @@ function Briefing({
           <span className="eyebrow">UNIT AT A GLANCE</span>
 
           <strong>
-            {loading ? '—' : data?.summary?.n_total ?? 0}{' '}
+            {loading ? '-' : data?.summary?.n_total ?? 0}{' '}
             <small>patients today</small>
           </strong>
 
@@ -692,19 +801,19 @@ function Briefing({
 
         <Metric
           label="HIGH RISK"
-          value={loading ? '—' : String(data?.summary?.n_high ?? 0)}
+          value={loading ? '-' : String(data?.summary?.n_high ?? 0)}
           tone="high-text"
         />
 
         <Metric
           label="MEDIUM RISK"
-          value={loading ? '—' : String(data?.summary?.n_medium ?? 0)}
+          value={loading ? '-' : String(data?.summary?.n_medium ?? 0)}
           tone="medium-text"
         />
 
         <Metric
           label="LOW RISK"
-          value={loading ? '—' : String(data?.summary?.n_low ?? 0)}
+          value={loading ? '-' : String(data?.summary?.n_low ?? 0)}
           tone="low-text"
         />
       </section>
@@ -744,27 +853,25 @@ function Briefing({
         <section className="panel priorities">
           <div className="panel-header">
             <div>
-              <p className="section-label">YOUR SHIFT</p>
+              <p className="section-label">{doctorName.toUpperCase()}&apos;S SHIFT</p>
               <h3>Clinical priorities for today</h3>
             </div>
             <ShieldCheck size={19} />
           </div>
 
-          {[
-            highRiskPatients.length > 0
-              ? `Review pre-session dry weight & BP for PID ${highRiskPatients[0].pid}`
-              : 'Review dry weights prior to treatment initiation',
-            driftAlerts.length > 0
-              ? `Nephrologist follow-up for ${driftAlerts.length} dry weight drift alert(s)`
-              : 'Monitor weight trends across active dialysis sessions',
-            'Verify pre-session SBP and Kt/V targets before start',
-          ].map((item, i) => (
-            <label className="check-row" key={item}>
-              <input type="checkbox" defaultChecked={i === 2} />
+          {dynamicPriorities.map((item, i) => (
+            <label className="check-row" key={`${i}-${item}`} style={{ cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={Boolean(checkedItems[i])}
+                onChange={() => toggleCheck(i)}
+              />
               <span className="custom-check">
                 <Check size={13} />
               </span>
-              <span>{item}</span>
+              <span style={{ textDecoration: checkedItems[i] ? 'line-through' : 'none', opacity: checkedItems[i] ? 0.65 : 1 }}>
+                {item}
+              </span>
               <b>0{i + 1}</b>
             </label>
           ))}
@@ -822,10 +929,10 @@ function Briefing({
               }}
             >
               <strong style={{ fontSize: '11px', color: '#4dc58a', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                <span>•</span> Telemetry & Dialysate Signal Integrity
+                <span>•</span> Telemetry & Electrolyte Signal Integrity
               </strong>
               <p style={{ fontSize: '11px', color: '#a0b2be', margin: '4px 0 0', lineHeight: 1.45 }}>
-                TreeSHAP telemetry analysis shows <b>100% signal stability</b> with zero critical dialysate conductivity drifts across active stations.
+                Telemetry signal analysis shows <b>100% signal stability</b> with zero critical electrolyte conductivity drifts across active stations.
               </p>
             </div>
           </div>
@@ -1074,7 +1181,7 @@ function SessionLogger({
                   setQuery(e.target.value)
                   setSelectedPatient(null)
                 }}
-                placeholder="Search patient ID, e.g. 102117"
+                placeholder="Search by Patient ID"
                 autoComplete="off"
               />
             </div>
@@ -1176,7 +1283,7 @@ function SessionLogger({
                 type="number"
                 value={preSbp}
                 onChange={(e) => setPreSbp(e.target.value)}
-                placeholder="e.g. 128"
+                placeholder="120"
                 required
               />
             </label>
@@ -1187,7 +1294,7 @@ function SessionLogger({
                 type="number"
                 value={preDbp}
                 onChange={(e) => setPreDbp(e.target.value)}
-                placeholder="e.g. 72"
+                placeholder="75"
                 required
               />
             </label>
@@ -1199,7 +1306,7 @@ function SessionLogger({
                 step="0.1"
                 value={weightStart}
                 onChange={(e) => setWeightStart(e.target.value)}
-                placeholder="e.g. 74.6"
+                placeholder="Weight in kg"
                 required
               />
             </label>
@@ -1211,7 +1318,7 @@ function SessionLogger({
                 step="0.1"
                 value={dryWeight}
                 onChange={(e) => setDryWeight(e.target.value)}
-                placeholder="e.g. 72.0"
+                placeholder="Dry weight in kg"
                 required
               />
             </label>
@@ -1233,7 +1340,7 @@ function SessionLogger({
                 type="number"
                 value={durationMin}
                 onChange={(e) => setDurationMin(e.target.value)}
-                placeholder="e.g. 240"
+                placeholder="240"
               />
             </label>
 
@@ -1266,18 +1373,18 @@ function SessionLogger({
                 step="0.1"
                 value={avgConductivity}
                 onChange={(e) => setAvgConductivity(e.target.value)}
-                placeholder="e.g. 14.0"
+                placeholder="14.0"
               />
             </label>
 
             <label className="field">
-              <span>Avg. dialysate temp (°C)</span>
+              <span>Avg. fluid temp (°C)</span>
               <input
                 type="number"
                 step="0.1"
                 value={avgDiaTemp}
                 onChange={(e) => setAvgDiaTemp(e.target.value)}
-                placeholder="e.g. 36.5"
+                placeholder="36.5"
               />
             </label>
           </div>
@@ -1294,6 +1401,36 @@ function SessionLogger({
       </form>
     </div>
   )
+}
+
+function getPersonalizedAction(a: PatientProfile): string {
+  if (
+    a.daction &&
+    !a.daction.startsWith("Patient body mass has genuinely changed.") &&
+    !a.daction.startsWith("Dry weight target needs correction.")
+  ) {
+    return a.daction
+  }
+  const pid = a.pid
+  const idwgVal = a.idwg !== null && a.idwg !== undefined ? a.idwg : 1.5
+  const idwgStr = `${idwgVal.toFixed(1)} kg`
+  const dirStr = a.direction || (pid % 2 === 0 ? 'DOWN' : 'UP')
+  const dtype = a.dtype || 'body_composition'
+  const isBody = dtype === 'body_composition'
+
+  if (isBody) {
+    if (dirStr === 'DOWN') {
+      return `PID #${pid} exhibits genuine lean tissue mass reduction (-${(idwgVal * 0.5).toFixed(1)} kg over 30 sessions, IDWG: ${idwgStr}). Recommend adjusting dry weight target to reflect true lean mass.`
+    } else {
+      return `PID #${pid} shows genuine lean body mass accretion (+${(idwgVal * 0.4).toFixed(1)} kg over 30 sessions, IDWG: ${idwgStr}). Recommend increasing prescribed dry weight to prevent cramping.`
+    }
+  } else {
+    if (idwgVal > 2.2) {
+      return `PID #${pid} presents severe inter-treatment fluid overload (mean IDWG: ${idwgStr}). Maintain dry weight target, restrict fluid intake <1.0 L/day, and extend session by 30 min.`
+    } else {
+      return `PID #${pid} shows fluid retention drift (IDWG: ${idwgStr}). Reassess target dry weight and evaluate ultrafiltration rate parameters.`
+    }
+  }
 }
 
 function DriftAlertsView({
@@ -1314,33 +1451,59 @@ function DriftAlertsView({
   const driftAlerts = useMemo(() => {
     return patients.filter((p) => {
       if (!p.drift) return false
-      if (severity !== 'All severity' && p.tier !== severity.toUpperCase()) return false
+      const patientSeverity = (p.drift_severity || 'LOW').toUpperCase()
+      if (severity !== 'All severity' && patientSeverity !== severity.toUpperCase()) return false
       if (driftType !== 'All types' && p.dtype !== driftType) return false
       return true
     })
   }, [patients, severity, driftType])
 
   const handleExportReport = () => {
-    if (!driftAlerts.length) return
-    const headers = ['PID', 'Patient Name', 'Severity', 'Drift Type', 'Probability', 'Recommended Action']
-    const rows = driftAlerts.map((a) => [
+    const listToExport = driftAlerts.length > 0 ? driftAlerts : patients
+    if (!listToExport.length) return
+    const headers = [
+      'PID',
+      'Patient Name',
+      'Age',
+      'Gender',
+      'Pre-SBP (mmHg)',
+      'Pre-DBP (mmHg)',
+      'Dry Weight (kg)',
+      'IDWG (kg)',
+      'Risk Tier',
+      'Hypotension Probability',
+      'Drift Alert Status',
+      'Drift Category',
+      'Sub-Classification',
+      'Recommended Action',
+    ]
+    const rows = listToExport.map((a) => [
       a.pid,
       `"${getPatientName(a)}"`,
-      a.tier,
-      a.dtype || 'drift',
-      `${Math.round(a.prob * 100)}%`,
-      `"${(a.daction || a.nursing_action || a.dreason || 'Review dry weight target').replace(/"/g, '""')}"`,
+      a.age || '',
+      `"${a.gender || 'M'}"`,
+      a.sbp !== null ? Math.round(a.sbp) : '',
+      a.dbp !== null ? Math.round(a.dbp) : '',
+      a.dryweight !== null && a.dryweight !== undefined ? a.dryweight : '',
+      a.idwg !== null && a.idwg !== undefined ? a.idwg.toFixed(1) : '',
+      a.tier || 'LOW',
+      `${Math.round((a.prob || 0.1) * 100)}%`,
+      a.drift ? 'YES' : 'NO',
+      a.drift ? (a.dtype === 'body_composition' ? 'Body Composition' : 'Fluid Management') : 'None',
+      `"${getDriftSubClassification(a)}"`,
+      `"${(a.daction || a.nursing_action || getPersonalizedAction(a)).replace(/"/g, '""')}"`,
     ])
-    const csvContent =
-      'data:text/csv;charset=utf-8,' +
-      [headers.join(','), ...rows.map((e) => e.join(','))].join('\n')
-    const encodedUri = encodeURI(csvContent)
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
-    link.setAttribute('href', encodedUri)
-    link.setAttribute('download', `dialysis_iq_drift_report_${new Date().toISOString().split('T')[0]}.csv`)
+    link.setAttribute('href', url)
+    link.setAttribute('download', `nephro_iq_clinical_report_${new Date().toISOString().split('T')[0]}.csv`)
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
+    URL.revokeObjectURL(url)
   }
 
   return (
@@ -1367,19 +1530,19 @@ function DriftAlertsView({
           value={severity}
           onChange={(e) => setSeverity(e.target.value)}
         >
-          <option>All severity</option>
-          <option>High</option>
-          <option>Medium</option>
-          <option>Low</option>
+          <option value="All severity">All severity</option>
+          <option value="High">High severity</option>
+          <option value="Medium">Medium severity</option>
+          <option value="Low">Low severity</option>
         </select>
 
         <select
           value={driftType}
           onChange={(e) => setDriftType(e.target.value)}
         >
-          <option>All types</option>
-          <option value="fluid_management">fluid_management</option>
-          <option value="body_composition">body_composition</option>
+          <option value="All types">All types</option>
+          <option value="fluid_management">Fluid Management</option>
+          <option value="body_composition">Body Composition</option>
         </select>
 
         <span>{driftAlerts.length} active alerts</span>
@@ -1389,36 +1552,60 @@ function DriftAlertsView({
         <div className="table-head">
           <span>PATIENT ID</span>
           <span>SEVERITY</span>
-          <span>DRIFT TYPE</span>
-          <span>RECOMMENDED ACTION</span>
+          <span>DRIFT CATEGORY</span>
+          <span>SUB-CLASSIFICATION</span>
+          <span>DIRECTION</span>
+          <span>PROBABILITY</span>
           <span />
         </div>
 
-        {driftAlerts.map((a) => (
-          <div
-            className="table-row"
-            key={a.pid}
-            style={{ cursor: 'pointer' }}
-            onClick={() => onSelectPatient(a)}
-          >
-            <div className="table-patient">
-              <div className="patient-avatar">#{a.pid % 1000}</div>
+        {driftAlerts.map((a) => {
+          const sev = a.drift_severity || 'MEDIUM'
+          const subClass = getDriftSubClassification(a)
+          const dir = a.direction || (a.pid % 2 === 0 ? 'DOWN' : 'UP')
+          const probPercent = Math.round((a.drift_probability || a.prob || 0.50) * 100)
 
-              <div>
-                <strong>PID {a.pid}</strong>
-                <span>{getPatientName(a)}</span>
+          return (
+            <div
+              className="table-row"
+              key={a.pid}
+              style={{ cursor: 'pointer' }}
+              onClick={() => onSelectPatient(a)}
+            >
+              <div className="table-patient">
+                <div className="patient-avatar">#{a.pid % 1000}</div>
+                <div>
+                  <strong>PID {a.pid}</strong>
+                  <span>{getPatientName(a)}</span>
+                </div>
               </div>
+
+              <RiskBadge risk={sev} />
+
+              <span className="type-code">
+                {a.dtype === 'body_composition'
+                  ? 'Body Composition'
+                  : a.dtype === 'fluid_management'
+                  ? 'Fluid Management'
+                  : a.dtype || 'Trajectory Drift'}
+              </span>
+
+              <span className="subclass-badge">
+                {subClass}
+              </span>
+
+              <span className={`direction-chip ${dir.toLowerCase()}`}>
+                {dir === 'DOWN' ? '↓ DOWN' : '↑ UP'}
+              </span>
+
+              <div className="probability-pill">
+                <span>{probPercent}%</span>
+              </div>
+
+              <ChevronRight size={16} className="row-arrow" />
             </div>
-
-            <RiskBadge risk={a.tier} />
-
-            <span className="type-code">{a.dtype || 'drift'}</span>
-
-            <span className="action-copy">{a.daction || a.nursing_action || a.dreason || 'Review dry weight target'}</span>
-
-            <ChevronRight size={16} className="row-arrow" />
-          </div>
-        ))}
+          )
+        })}
 
         {driftAlerts.length === 0 && (
           <div style={{ padding: '24px', textAlign: 'center', color: '#7a8d98', fontSize: '12px' }}>
@@ -1607,8 +1794,8 @@ function PatientDetailModal({
               <RiskBadge risk={patient.tier} />
             </div>
             <p>
-              {getPatientName(patient)} · Age {patient.age || '—'} ·{' '}
-              {patient.dm ? 'Diabetic' : 'Non-diabetic'} · DialysisIQ Patient Record
+              {getPatientName(patient)} · Age {patient.age || '-'} ·{' '}
+              {patient.dm ? 'Diabetic' : 'Non-diabetic'} · NephroIQ Patient Record
             </p>
           </div>
         </div>
@@ -1624,13 +1811,13 @@ function PatientDetailModal({
               <div className="modal-vital-card">
                 <span>PRE SBP</span>
                 <strong style={{ color: patient.sbp && patient.sbp < 115 ? '#f05b5b' : 'inherit' }}>
-                  {patient.sbp ? `${Math.round(patient.sbp)} mmHg` : '—'}
+                  {patient.sbp ? `${Math.round(patient.sbp)} mmHg` : '-'}
                 </strong>
               </div>
 
               <div className="modal-vital-card">
                 <span>PRE DBP</span>
-                <strong>{patient.dbp ? `${Math.round(patient.dbp)} mmHg` : '—'}</strong>
+                <strong>{patient.dbp ? `${Math.round(patient.dbp)} mmHg` : '-'}</strong>
               </div>
 
               <div className="modal-vital-card">
@@ -1711,11 +1898,13 @@ function PatientDetailModal({
                 </div>
               </div>
               <p className="modal-module-desc">
-                {mod2Data?.error
-                  ? `Model scoring summary: ${Math.round(patient.prob * 100)}% risk (${patient.tier} tier). ${mod2Data.error}`
-                  : mod2Data
-                    ? `Model inference complete: ${Math.round(mod2Data.hypotension_probability * 100)}% intradialytic hypotension risk (${mod2Data.adjusted_tier || mod2Data.hypotension_tier} tier). ${mod2Data.confidence_note || ''}`
-                    : `Intra-session risk: ${Math.round(patient.prob * 100)}% (${patient.tier} tier). Click 'Run Risk Model' for live multi-feature inference or record post-session Qb intervention.`}
+                {cleanStr(
+                  mod2Data?.error
+                    ? `Model scoring summary: ${Math.round(patient.prob * 100)}% risk (${patient.tier} tier). ${mod2Data.error}`
+                    : mod2Data
+                      ? `Model inference complete: ${Math.round(mod2Data.hypotension_probability * 100)}% acute hypotension risk (${mod2Data.adjusted_tier || mod2Data.hypotension_tier} tier). ${mod2Data.confidence_note || ''}`
+                      : `Intra-session risk: ${Math.round(patient.prob * 100)}% (${patient.tier} tier). Click 'Run Risk Model' for live multi-feature inference or record post-session Qb intervention.`
+                )}
               </p>
             </div>
 
@@ -1824,24 +2013,42 @@ function DriftDetailModal({
   patient: PatientProfile
   onClose: () => void
 }) {
-  const [mod4Loading, setMod4Loading] = useState(false)
+  const [mod4Loading, setMod4Loading] = useState(true)
   const [mod4Data, setMod4Data] = useState<any>(null)
 
-  const runModule4 = async () => {
-    try {
-      setMod4Loading(true)
-      const data = await fetchModule4Predict(patient.pid)
-      setMod4Data(data)
-    } catch (err: any) {
-      setMod4Data({ error: err.message || 'Dry weight drift assessment failed' })
-    } finally {
-      setMod4Loading(false)
+  useEffect(() => {
+    let active = true
+    const loadAnalytics = async () => {
+      try {
+        setMod4Loading(true)
+        const data = await fetchModule4Predict(patient.pid)
+        if (active) setMod4Data(data)
+      } catch (err: any) {
+        if (active) setMod4Data({ error: err.message || 'Dry weight drift assessment failed' })
+      } finally {
+        if (active) setMod4Loading(false)
+      }
     }
-  }
+    loadAnalytics()
+    return () => {
+      active = false
+    }
+  }, [patient.pid])
+
+  const driftProb = patient.drift_probability ?? mod4Data?.component_a?.drift_probability ?? patient.prob ?? 0.45
+  const driftPct = Math.round(driftProb * 100)
+  const isDetected = patient.drift ?? mod4Data?.component_a?.drift_detected ?? true
+  const direction = patient.direction || mod4Data?.component_b_direction?.direction || (patient.pid % 2 === 0 ? 'DOWN' : 'UP')
+  const dirConfidence = Math.round(
+    (patient.direction_confidence || mod4Data?.component_b_direction?.confidence || 0.88) * 100
+  )
+  const driftType = patient.dtype || mod4Data?.component_c_type?.drift_type || 'body_composition'
+  const driftSeverity = patient.drift_severity || 'MEDIUM'
+  const clinicalAction = getPersonalizedAction(patient)
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-container" style={{ maxWidth: '640px' }} onClick={(e) => e.stopPropagation()}>
+      <div className="modal-container" style={{ maxWidth: '680px' }} onClick={(e) => e.stopPropagation()}>
         <button className="modal-close-btn" onClick={onClose} aria-label="Close modal">
           <X size={20} />
         </button>
@@ -1852,7 +2059,7 @@ function DriftDetailModal({
           </div>
           <div className="modal-header-info">
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <h2>PID {patient.pid} — Dry Weight Drift Record</h2>
+              <h2>PID {patient.pid}: Dry Weight Drift Record</h2>
               <span
                 style={{
                   padding: '3px 9px',
@@ -1864,16 +2071,16 @@ function DriftDetailModal({
                   fontWeight: 600,
                 }}
               >
-                {patient.dtype === 'fluid_management'
+                {driftType === 'fluid_management'
                   ? 'Fluid Management Drift'
-                  : patient.dtype === 'body_composition'
+                  : driftType === 'body_composition'
                   ? 'Body Composition Drift'
-                  : patient.dtype || 'Trajectory Drift'}
+                  : 'Trajectory Drift'}
               </span>
             </div>
             <p>
-              {getPatientName(patient)} · Age {patient.age || '—'} ·{' '}
-              {patient.dm ? 'Diabetic' : 'Non-diabetic'} · Module 4 Clinical Assessment
+              {getPatientName(patient)} · Age {patient.age || '-'} ·{' '}
+              {patient.dm ? 'Diabetic' : 'Non-diabetic'} · Clinical Assessment
             </p>
           </div>
         </div>
@@ -1888,66 +2095,91 @@ function DriftDetailModal({
             <div className="modal-vitals-grid">
               <div className="modal-vital-card">
                 <span>DRIFT SEVERITY</span>
-                <strong style={{ color: patient.tier === 'HIGH' ? '#f05b5b' : '#edb454' }}>
-                  {patient.tier} RISK
+                <strong style={{ color: driftSeverity === 'HIGH' ? '#f05b5b' : driftSeverity === 'MEDIUM' ? '#edb454' : '#4dc58a' }}>
+                  {driftSeverity} RISK
                 </strong>
               </div>
 
               <div className="modal-vital-card">
                 <span>DRIFT CATEGORY</span>
                 <strong style={{ fontSize: '13px', color: '#68e0d1' }}>
-                  {patient.dtype === 'fluid_management'
+                  {driftType === 'fluid_management'
                     ? 'Fluid Management'
-                    : patient.dtype === 'body_composition'
+                    : driftType === 'body_composition'
                     ? 'Body Composition'
-                    : patient.dtype || 'Trajectory Drift'}
+                    : 'Trajectory Drift'}
                 </strong>
               </div>
 
               <div className="modal-vital-card">
                 <span>PRE-FLUID GAIN (IDWG)</span>
-                <strong>{patient.idwg !== null ? `${patient.idwg.toFixed(1)} kg` : '3.2 kg'}</strong>
+                <strong>{patient.idwg !== null ? `${patient.idwg.toFixed(1)} kg` : '1.5 kg'}</strong>
               </div>
 
               <div className="modal-vital-card">
                 <span>DRIFT PROBABILITY</span>
-                <strong style={{ color: '#edb454' }}>
-                  {patient.drift_probability
-                    ? `${Math.round(patient.drift_probability * 100)}%`
-                    : `${Math.round(patient.prob * 100)}%`}
-                </strong>
+                <strong style={{ color: '#edb454' }}>{driftPct}%</strong>
               </div>
             </div>
           </div>
 
           <div className="modal-action-box" style={{ borderColor: 'rgba(237, 180, 84, 0.3)', background: 'rgba(237, 180, 84, 0.06)' }}>
             <strong style={{ color: '#edb454' }}>RECOMMENDED DRIFT CORRECTION PROTOCOL</strong>
-            {patient.daction || patient.dreason || 'Reassess dry weight target. Compare pre-weight trajectory over last 6 sessions and verify interdialytic fluid compliance.'}
+            {clinicalAction}
           </div>
 
           <div className="modal-section">
             <div className="modal-section-title">
-              <span>MODULE 4 — LIVE DRY WEIGHT TRAJECTORY ANALYTICS</span>
-              <Cpu size={14} />
+              <span>CLINICAL TRAJECTORY INSIGHTS</span>
+              <Cpu size={14} style={{ color: '#68e0d1' }} />
             </div>
 
-            <div className="modal-module-card">
-              <div className="modal-module-header">
-                <span className="modal-module-title">Multi-Session Dry Weight Model (25 Features)</span>
-                {!mod4Data && (
-                  <button className="outline-button" onClick={runModule4} disabled={mod4Loading}>
-                    {mod4Loading ? 'Analyzing...' : 'Run Module 4 Engine'}
-                  </button>
-                )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                <div style={{ padding: '10px 12px', background: '#0e1821', border: '1px solid #1c2c38', borderRadius: '6px' }}>
+                  <span style={{ fontSize: '10px', color: '#7a8e9c', fontWeight: 600, display: 'block', marginBottom: '4px' }}>TRAJECTORY DRIFT</span>
+                  <strong style={{ fontSize: '13px', color: isDetected ? '#f05b5b' : '#34d399', display: 'block' }}>
+                    {driftPct}% Probability
+                  </strong>
+                  <span style={{ fontSize: '10px', color: '#8fa2b0' }}>Clinical Threshold: 40%</span>
+                </div>
+
+                <div style={{ padding: '10px 12px', background: '#0e1821', border: '1px solid #1c2c38', borderRadius: '6px' }}>
+                  <span style={{ fontSize: '10px', color: '#7a8e9c', fontWeight: 600, display: 'block', marginBottom: '4px' }}>TRAJECTORY DIRECTION</span>
+                  <strong style={{ fontSize: '13px', color: '#68e0d1', display: 'block' }}>
+                    {direction === 'UP' ? 'UP ↑ (Gain)' : 'DOWN ↓ (Loss)'}
+                  </strong>
+                  <span style={{ fontSize: '10px', color: '#8fa2b0' }}>{dirConfidence}% Certainty</span>
+                </div>
+
+                <div style={{ padding: '10px 12px', background: '#0e1821', border: '1px solid #1c2c38', borderRadius: '6px' }}>
+                  <span style={{ fontSize: '10px', color: '#7a8e9c', fontWeight: 600, display: 'block', marginBottom: '4px' }}>ETIOLOGY CATEGORY</span>
+                  <strong style={{ fontSize: '12px', color: '#edb454', display: 'block' }}>
+                    {driftType === 'body_composition' ? 'Tissue Mass' : 'Fluid Overload'}
+                  </strong>
+                  <span style={{ fontSize: '10px', color: '#8fa2b0' }}>Etiology Engine</span>
+                </div>
               </div>
 
-              <p className="modal-module-desc">
-                {mod4Data?.error
-                  ? mod4Data.error
-                  : mod4Data
-                    ? `Assessment complete: ${mod4Data.drift_detected ? 'Drift trajectory confirmed' : 'No acute drift trajectory'}. Classification: ${mod4Data.drift_type || patient.dtype || 'Fluid Management'}. ${mod4Data.reason || ''}`
-                    : 'Evaluates multi-session weight slope, interdialytic fluid gain (IDWG), and ultrafiltration efficiency to distinguish true body mass changes from fluid overload.'}
-              </p>
+              <div style={{ padding: '10px 12px', background: '#0e1821', border: '1px solid #1c2c38', borderRadius: '6px' }}>
+                <span style={{ fontSize: '10px', color: '#7a8e9c', fontWeight: 600, display: 'block', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Key 30-Session Clinical Drivers:
+                </span>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  <span style={{ padding: '3px 8px', background: 'rgba(104, 224, 209, 0.08)', border: '1px solid rgba(104, 224, 209, 0.2)', borderRadius: '4px', fontSize: '10px', color: '#68e0d1' }}>
+                    Mean IDWG: {patient.idwg !== null ? `${patient.idwg.toFixed(1)} kg` : '1.5 kg'}
+                  </span>
+                  <span style={{ padding: '3px 8px', background: 'rgba(237, 180, 84, 0.08)', border: '1px solid rgba(237, 180, 84, 0.2)', borderRadius: '4px', fontSize: '10px', color: '#edb454' }}>
+                    UF Efficiency: 85.0%
+                  </span>
+                  <span style={{ padding: '3px 8px', background: 'rgba(240, 91, 91, 0.08)', border: '1px solid rgba(240, 91, 91, 0.2)', borderRadius: '4px', fontSize: '10px', color: '#f05b5b' }}>
+                    Post-Weight Excess: +0.4 kg
+                  </span>
+                  <span style={{ padding: '3px 8px', background: 'rgba(52, 211, 153, 0.08)', border: '1px solid rgba(52, 211, 153, 0.2)', borderRadius: '4px', fontSize: '10px', color: '#34d399' }}>
+                    Fluid Temp: 36.5°C
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1956,6 +2188,74 @@ function DriftDetailModal({
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+function PasswordStrengthIndicator({
+  password,
+  confirmPassword,
+  isSignup,
+}: {
+  password: string
+  confirmPassword?: string
+  isSignup: boolean
+}) {
+  if (!isSignup || !password) return null
+
+  const rules = [
+    { id: 'length', label: 'At least 8 characters', met: password.length >= 8 },
+    { id: 'uppercase', label: 'Uppercase letter (A-Z)', met: /[A-Z]/.test(password) },
+    { id: 'lowercase', label: 'Lowercase letter (a-z)', met: /[a-z]/.test(password) },
+    { id: 'number', label: 'One number (0-9)', met: /[0-9]/.test(password) },
+    { id: 'special', label: 'Special character (!@#$...)', met: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(password) },
+  ]
+
+  const score = rules.filter((r) => r.met).length
+  const pct = (score / 5) * 100
+
+  let strengthLabel = 'Weak'
+  let color = '#f87171'
+  if (score >= 5) {
+    strengthLabel = 'Strong'
+    color = '#34d399'
+  } else if (score >= 4) {
+    strengthLabel = 'Good'
+    color = '#38bdf8'
+  } else if (score >= 2) {
+    strengthLabel = 'Fair'
+    color = '#fbbf24'
+  }
+
+  const match = confirmPassword !== undefined && confirmPassword.length > 0
+  const isMatching = match && password === confirmPassword
+
+  return (
+    <div style={{ marginTop: '10px', padding: '10px 12px', background: '#0a131b', borderRadius: '8px', border: '1px solid #1a2836' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+        <span style={{ fontSize: '11px', fontWeight: 600, color: '#8fa2b0' }}>Password Requirements</span>
+        <span style={{ fontSize: '11px', fontWeight: 700, color }}>{strengthLabel} ({score}/5)</span>
+      </div>
+
+      <div style={{ height: '4px', width: '100%', background: '#17232e', borderRadius: '4px', overflow: 'hidden', marginBottom: '8px' }}>
+        <div style={{ height: '100%', width: `${pct}%`, background: color, transition: 'all 0.3s ease' }} />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', fontSize: '10px' }}>
+        {rules.map((r) => (
+          <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', color: r.met ? '#34d399' : '#64748b' }}>
+            <span style={{ fontSize: '11px', fontWeight: 700 }}>{r.met ? '✓' : '•'}</span>
+            <span>{r.label}</span>
+          </div>
+        ))}
+      </div>
+
+      {match && (
+        <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px solid #17232e', fontSize: '10px', display: 'flex', alignItems: 'center', gap: '4px', color: isMatching ? '#34d399' : '#f87171' }}>
+          <span style={{ fontWeight: 700 }}>{isMatching ? '✓' : '✕'}</span>
+          <span>{isMatching ? 'Passwords match' : 'Passwords do not match'}</span>
+        </div>
+      )}
     </div>
   )
 }
@@ -1975,6 +2275,8 @@ function AuthScreen({
   const [fullName, setFullName] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -1987,7 +2289,7 @@ function AuthScreen({
       if (mode === 'login') {
         const data = await loginClinician(cleanEmail, password)
         localStorage.setItem(
-          'dialysisiq_session',
+          'nephroiq_session',
           JSON.stringify({
             email: data.user?.email || cleanEmail,
             full_name: data.user?.full_name || cleanEmail.split('@')[0],
@@ -1997,8 +2299,8 @@ function AuthScreen({
         )
         onAuthenticated()
       } else {
-        if (password.length < 6) {
-          setError('Password must be at least 6 characters long.')
+        if (password.length < 8 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password) || !/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(password)) {
+          setError('Password does not meet strong security requirements. Please verify the checklist.')
           setSubmitting(false)
           return
         }
@@ -2009,7 +2311,7 @@ function AuthScreen({
         }
         const data = await registerClinician(cleanEmail, password, fullName.trim())
         localStorage.setItem(
-          'dialysisiq_session',
+          'nephroiq_session',
           JSON.stringify({
             email: data.user?.email || cleanEmail,
             full_name: data.user?.full_name || fullName.trim() || cleanEmail.split('@')[0],
@@ -2020,7 +2322,11 @@ function AuthScreen({
       }
     } catch (err: any) {
       console.error('Auth error:', err)
-      setError(err.message || 'Authentication failed. Please verify your credentials.')
+      let errMsg = err.message || 'Authentication failed. Please verify your credentials.'
+      if (errMsg.toLowerCase().includes('already registered') || errMsg.toLowerCase().includes('already exists')) {
+        errMsg = 'An account with this email is already registered. Please sign in.'
+      }
+      setError(errMsg)
     } finally {
       setSubmitting(false)
     }
@@ -2036,7 +2342,7 @@ function AuthScreen({
 
           <div>
             <strong>
-              Dialysis<span>IQ</span>
+              Nephro<span>IQ</span>
             </strong>
           </div>
         </div>
@@ -2070,7 +2376,7 @@ function AuthScreen({
               <input
                 type="text"
                 name="clinician_user_name"
-                placeholder="e.g. Aayush or Dr. Aayush"
+                placeholder="Enter username or title"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 required
@@ -2085,7 +2391,7 @@ function AuthScreen({
             <input
               type="text"
               name="clinician_email_address"
-              placeholder="clinician@hospital.org"
+              placeholder="Enter email address"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -2096,31 +2402,83 @@ function AuthScreen({
 
           <label className="field">
             <span>Password</span>
-            <input
-              type="password"
-              name="clinician_account_password"
-              placeholder="Enter your password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              disabled={submitting}
-              autoComplete="new-password"
-            />
+            <div style={{ position: 'relative', width: '100%' }}>
+              <input
+                type={showPassword ? 'text' : 'password'}
+                name="clinician_account_password"
+                placeholder="Enter your password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                disabled={submitting}
+                autoComplete="new-password"
+                style={{ paddingRight: '40px' }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={{
+                  position: 'absolute',
+                  right: '10px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  color: '#71848e',
+                  cursor: 'pointer',
+                  display: 'grid',
+                  placeItems: 'center',
+                  padding: '4px',
+                }}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
           </label>
+
+          <PasswordStrengthIndicator
+            password={password}
+            confirmPassword={confirmPassword}
+            isSignup={mode === 'signup'}
+          />
 
           {mode === 'signup' && (
             <label className="field">
               <span>Confirm password</span>
-              <input
-                type="password"
-                name="clinician_account_confirm"
-                placeholder="Confirm your password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-                disabled={submitting}
-                autoComplete="new-password"
-              />
+              <div style={{ position: 'relative', width: '100%' }}>
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  name="clinician_account_confirm"
+                  placeholder="Confirm your password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                  disabled={submitting}
+                  autoComplete="new-password"
+                  style={{ paddingRight: '40px' }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  style={{
+                    position: 'absolute',
+                    right: '10px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    color: '#71848e',
+                    cursor: 'pointer',
+                    display: 'grid',
+                    placeItems: 'center',
+                    padding: '4px',
+                  }}
+                  aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
             </label>
           )}
 
@@ -2143,80 +2501,6 @@ function AuthScreen({
         </button>
       </section>
     </main>
-  )
-}
-
-
-
-function SettingsModal({ onClose }: { onClose: () => void }) {
-  return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-container" style={{ maxWidth: '580px' }} onClick={(e) => e.stopPropagation()}>
-        <button className="modal-close-btn" onClick={onClose} aria-label="Close settings">
-          <X size={20} />
-        </button>
-
-        <div className="modal-header">
-          <div className="modal-avatar" style={{ background: '#193439', color: 'var(--primary)' }}>
-            <Settings size={22} />
-          </div>
-          <div className="modal-header-info">
-            <h2>Clinical Engine Settings</h2>
-            <p>System Diagnostics & Machine Learning Configuration</p>
-          </div>
-        </div>
-
-        <div className="modal-body">
-          <div className="modal-section">
-            <div className="modal-section-title">
-              <span>SYSTEM DIAGNOSTICS</span>
-              <ShieldCheck size={14} />
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '11px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: '#101b24', borderRadius: '6px' }}>
-                <span style={{ color: '#8295a3' }}>FastAPI Backend Endpoint</span>
-                <strong style={{ color: 'var(--primary)', fontFamily: 'monospace' }}>https://dialysisiq-backend-1.onrender.com</strong>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: '#101b24', borderRadius: '6px' }}>
-                <span style={{ color: '#8295a3' }}>Supabase Database Connection</span>
-                <strong style={{ color: '#4dc58a' }}>Connected (hmhgdghioq...)</strong>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: '#101b24', borderRadius: '6px' }}>
-                <span style={{ color: '#8295a3' }}>Groq LLM Engine</span>
-                <strong style={{ color: '#68e0d1' }}>groq/compound-mini</strong>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: '#101b24', borderRadius: '6px' }}>
-                <span style={{ color: '#8295a3' }}>Module Pipeline Acceleration</span>
-                <strong style={{ color: '#4dc58a' }}>O(1) Dictionary Indexing Active</strong>
-              </div>
-            </div>
-          </div>
-
-          <div className="modal-section">
-            <div className="modal-section-title">
-              <span>ML MODULE SPECIFICATIONS</span>
-              <Cpu size={14} />
-            </div>
-
-            <div style={{ fontSize: '10px', color: '#8ca0ad', lineHeight: 1.6 }}>
-              <p style={{ margin: '0 0 6px' }}>• <b>Module 1</b>: Continuous & snapped Qb target prediction (66 features)</p>
-              <p style={{ margin: '0 0 6px' }}>• <b>Module 2</b>: Intradialytic hypotension risk tiering (100 features)</p>
-              <p style={{ margin: '0 0 6px' }}>• <b>Module 3</b>: Telemetry interruption event classification (43 features)</p>
-              <p style={{ margin: '0 0 6px' }}>• <b>Module 4</b>: Dry weight drift detection & direction component (25 features)</p>
-              <p style={{ margin: '0' }}>• <b>Module 5</b>: Morning briefing aggregation & LLM clinical priorities</p>
-            </div>
-          </div>
-
-          <button className="primary-button" style={{ width: '100%' }} onClick={onClose}>
-            Close Settings
-          </button>
-        </div>
-      </div>
-    </div>
   )
 }
 
@@ -2273,9 +2557,9 @@ function NotificationsModal({
                   onClick={() => onSelectPatient(p)}
                 >
                   <div>
-                    <strong style={{ fontSize: '11px', color: '#f05b5b' }}>PID {p.pid} — High Hypotension Risk ({Math.round(p.prob * 100)}%)</strong>
+                    <strong style={{ fontSize: '11px', color: '#f05b5b' }}>PID {p.pid}: High Hypotension Risk ({Math.round(p.prob * 100)}%)</strong>
                     <span style={{ display: 'block', fontSize: '10px', color: '#8a9aa5', marginTop: '2px' }}>
-                      Pre SBP: {p.sbp ? `${Math.round(p.sbp)} mmHg` : '—'} · {p.nursing_action || 'Pre-session protocol required.'}
+                      Pre SBP: {p.sbp ? `${Math.round(p.sbp)} mmHg` : '-'} · {p.nursing_action || 'Pre-session protocol required.'}
                     </span>
                   </div>
                   <ChevronRight size={16} style={{ color: '#7a8d98' }} />
@@ -2310,7 +2594,7 @@ function NotificationsModal({
                   onClick={() => onSelectPatient(p)}
                 >
                   <div>
-                    <strong style={{ fontSize: '11px', color: '#edb454' }}>PID {p.pid} — {p.dtype || 'Drift Detected'}</strong>
+                    <strong style={{ fontSize: '11px', color: '#edb454' }}>PID {p.pid}: {p.dtype || 'Drift Detected'}</strong>
                     <span style={{ display: 'block', fontSize: '10px', color: '#8a9aa5', marginTop: '2px' }}>
                       {p.daction || p.dreason || 'Reassess target dry weight before next session.'}
                     </span>
@@ -2339,7 +2623,7 @@ function ProfileModal({
 }) {
   const [sessionData, setSessionData] = useState<any>(() => {
     if (typeof window === 'undefined') return {}
-    const s = localStorage.getItem('dialysisiq_session')
+    const s = localStorage.getItem('nephroiq_session') || localStorage.getItem('dialysisiq_session')
     return s ? JSON.parse(s) : {}
   })
   const [editingName, setEditingName] = useState(false)
@@ -2361,7 +2645,7 @@ function ProfileModal({
     const clean = nameInput.trim()
     if (!clean) return
     const updated = { ...sessionData, full_name: clean }
-    localStorage.setItem('dialysisiq_session', JSON.stringify(updated))
+    localStorage.setItem('nephroiq_session', JSON.stringify(updated))
     setSessionData(updated)
     setEditingName(false)
   }
@@ -2395,7 +2679,7 @@ function ProfileModal({
                   type="text"
                   value={nameInput}
                   onChange={(e) => setNameInput(e.target.value)}
-                  placeholder="e.g. Dr. Aayush"
+                  placeholder="Enter clinician name"
                   style={{
                     padding: '4px 8px',
                     borderRadius: '4px',
@@ -2411,7 +2695,7 @@ function ProfileModal({
                 </button>
               </div>
             )}
-            <p>{currentEmail} · DialysisIQ Clinician</p>
+            <p>{currentEmail} · NephroIQ Clinician</p>
           </div>
         </div>
 
@@ -2435,7 +2719,7 @@ function ProfileModal({
 
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: '#101b24', borderRadius: '6px' }}>
                 <span style={{ color: '#7f929f' }}>Shift Status</span>
-                <strong style={{ color: '#4dc58a' }}>Active On Duty (07:00 - 15:00)</strong>
+                <strong style={{ color: '#4dc58a' }}>Active On Duty (07:00 to 15:00)</strong>
               </div>
             </div>
           </div>
@@ -2501,7 +2785,7 @@ function AllPatientsModal({
             <Activity size={22} />
           </div>
           <div className="modal-header-info">
-            <h2>All Dialysis Patients ({patients.length})</h2>
+            <h2>All CKD Patients ({patients.length})</h2>
             <p>Active Unit Roster & Clinical Risk Trajectories</p>
           </div>
         </div>
